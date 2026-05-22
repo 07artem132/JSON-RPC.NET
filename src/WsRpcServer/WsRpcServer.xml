@@ -1,0 +1,1652 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>WsRpcServer</name>
+    </assembly>
+    <members>
+        <member name="T:WsRpcServer.Core.AbstractJsonRpcServer">
+            <summary>
+            Абстрактний базовий клас для JSON-RPC WebSocket серверів.
+            Наслідується від WsServer з бібліотеки NetCoreServer для забезпечення низькорівневої роботи з WebSocket.
+            Реалізує патерн "Шаблонний метод", де базова логіка визначена тут, а специфічні деталі реалізуються у похідних класах.
+            </summary>
+            <remarks>
+            Використання NetCoreServer як базової бібліотеки дозволяє отримати високу продуктивність та низьку затримку, 
+            оскільки вона оптимізована для обробки тисяч з'єднань. Клас надає необхідну абстракцію для спрощення інтеграції 
+            з JSON-RPC, дозволяючи зосередитись на бізнес-логіці, а не на деталях транспортного рівня.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractJsonRpcServer.#ctor(System.Net.IPAddress,System.Int32,System.IServiceProvider,Microsoft.Extensions.Logging.ILogger)">
+            <summary>
+            Абстрактний базовий клас для JSON-RPC WebSocket серверів.
+            Наслідується від WsServer з бібліотеки NetCoreServer для забезпечення низькорівневої роботи з WebSocket.
+            Реалізує патерн "Шаблонний метод", де базова логіка визначена тут, а специфічні деталі реалізуються у похідних класах.
+            </summary>
+            <remarks>
+            Використання NetCoreServer як базової бібліотеки дозволяє отримати високу продуктивність та низьку затримку, 
+            оскільки вона оптимізована для обробки тисяч з'єднань. Клас надає необхідну абстракцію для спрощення інтеграції 
+            з JSON-RPC, дозволяючи зосередитись на бізнес-логіці, а не на деталях транспортного рівня.
+            </remarks>
+        </member>
+        <member name="F:WsRpcServer.Core.AbstractJsonRpcServer.ServiceProvider">
+            <summary>
+            Постачальник сервісів для створення екземплярів залежностей.
+            Ключовий компонент для інтеграції з DI контейнером та забезпечення доступу до зареєстрованих сервісів.
+            </summary>
+        </member>
+        <member name="F:WsRpcServer.Core.AbstractJsonRpcServer._logger">
+            <summary>
+            Логер для реєстрації подій сервера.
+            </summary>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractJsonRpcServer.CreateSession">
+            <summary>
+            Створює нову WebSocket сесію для підключеного клієнта.
+            Цей метод перевизначено для повернення спеціалізованого типу сесії для JSON-RPC.
+            </summary>
+            <returns>Новий екземпляр сесії.</returns>
+            <remarks>
+            NetCoreServer викликає цей метод при кожному новому з'єднанні.
+            Використання фабричного методу дозволяє створювати різні типи сесій для різних реалізацій.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractJsonRpcServer.CreateJsonRpcSession">
+            <summary>
+            Створює нову спеціалізовану сесію JSON-RPC.
+            Абстрактний метод, який має бути реалізований у похідних класах.
+            </summary>
+            <returns>Спеціалізований екземпляр WsSession для обробки JSON-RPC повідомлень.</returns>
+            <remarks>
+            Цей метод дозволяє кожній конкретній реалізації сервера визначати свій тип сесії,
+            що забезпечує гнучкість у обробці різних типів клієнтських з'єднань.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractJsonRpcServer.OnError(System.Net.Sockets.SocketError)">
+            <summary>
+            Обробляє помилки сокета, які виникають на рівні сервера.
+            Перевизначає базову реалізацію з WsServer для забезпечення логування.
+            </summary>
+            <param name="error">Помилка сокета, що виникла.</param>
+            <remarks>
+            Викликається NetCoreServer автоматично при виникненні помилок сокета на серверному рівні.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractJsonRpcServer.OnServerError(System.Net.Sockets.SocketError)">
+            <summary>
+            Викликається при виникненні помилки сервера.
+            Дозволяє похідним класам реагувати на помилки особливим чином.
+            </summary>
+            <param name="error">Помилка сокета, що виникла.</param>
+            <remarks>
+            Використовується для розширення обробки помилок без перевизначення базового методу OnError.
+            Порожня реалізація за замовчуванням дозволяє похідним класам реагувати лише при необхідності.
+            </remarks>
+        </member>
+        <member name="T:WsRpcServer.Core.AbstractSubscriptionStore`3">
+            <summary>
+            Абстрактний базовий клас для збереження та управління підписками.
+            Реалізує інтерфейс ISubscriptionStore та забезпечує базову логіку для операцій з підписками.
+            </summary>
+            <typeparam name="TSubscription">Тип об'єкта підписки</typeparam>
+            <typeparam name="TEventArgs">Тип аргументів події</typeparam>
+            <typeparam name="TEventType">Тип події</typeparam>
+            <remarks>
+            Клас використовує ReaderWriterLockSlim для забезпечення потокової безпеки при високій конкурентності.
+            Цей вибір обумовлений необхідністю підтримки багатьох одночасних операцій читання з рідкісними операціями запису,
+            що типово для сценаріїв з підписками (більше читань подій, ніж змін підписок).
+            </remarks>
+        </member>
+        <member name="F:WsRpcServer.Core.AbstractSubscriptionStore`3._lock">
+            <summary>
+            Блокування для синхронізації доступу до сховища підписок.
+            ReaderWriterLockSlim обрано замість звичайного lock для забезпечення більшої продуктивності
+            при численних операціях читання з рідкісними операціями запису.
+            </summary>
+        </member>
+        <member name="F:WsRpcServer.Core.AbstractSubscriptionStore`3._nextSubscriptionId">
+            <summary>
+            Лічильник для генерації унікальних ідентифікаторів підписок.
+            Використовується Interlocked.Increment для атомарного збільшення без додаткового блокування.
+            </summary>
+        </member>
+        <member name="F:WsRpcServer.Core.AbstractSubscriptionStore`3._disposed">
+            <summary>
+            Прапорець для відстеження стану утилізації об'єкта.
+            </summary>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractSubscriptionStore`3.AddSubscription(`0,System.Int32)">
+            <summary>
+            Додає нову підписку до сховища.
+            </summary>
+            <param name="subscription">Об'єкт підписки</param>
+            <param name="providerSubscriptionId">Ідентифікатор підписки у провайдері</param>
+            <remarks>
+            Метод використовує WriteLock, оскільки він модифікує стан сховища.
+            Реальна логіка делегується до абстрактного методу AddSubscriptionCore.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractSubscriptionStore`3.GetSubscription(System.Int32)">
+            <summary>
+            Отримує підписку за її ідентифікатором.
+            </summary>
+            <param name="subscriptionId">Ідентифікатор підписки</param>
+            <returns>Об'єкт підписки або null, якщо підписка не знайдена</returns>
+            <remarks>
+            Метод використовує ReadLock, оскільки він тільки читає стан сховища.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractSubscriptionStore`3.RemoveSubscription(System.Guid,System.Int32)">
+            <summary>
+            Видаляє підписку клієнта.
+            </summary>
+            <param name="clientId">Ідентифікатор клієнта</param>
+            <param name="subscriptionId">Ідентифікатор підписки</param>
+            <returns>
+            Кортеж, що містить:
+            - Видалену підписку (або null)
+            - Набір клієнтів, які все ще мають цю підписку (або null)
+            - Ідентифікатор підписки у провайдері
+            </returns>
+            <remarks>
+            Метод використовує WriteLock, оскільки він модифікує стан сховища.
+            Повертає інформацію про клієнтів, які все ще підписані, що дозволяє
+            ефективно керувати підписками у зовнішніх системах.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractSubscriptionStore`3.UpdateSubscription(`0)">
+            <summary>
+            Оновлює існуючу підписку.
+            </summary>
+            <param name="subscription">Оновлений об'єкт підписки</param>
+            <remarks>
+            Метод використовує WriteLock, оскільки він модифікує стан сховища.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractSubscriptionStore`3.GetClientSubscriptionIds(System.Guid)">
+            <summary>
+            Отримує список ідентифікаторів підписок для конкретного клієнта.
+            </summary>
+            <param name="clientId">Ідентифікатор клієнта</param>
+            <returns>Список ідентифікаторів підписок</returns>
+            <remarks>
+            Метод використовує ReadLock, оскільки він тільки читає стан сховища.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractSubscriptionStore`3.GetClientSubscriptionsInfo(System.Guid)">
+            <summary>
+            Отримує інформацію про підписки клієнта.
+            </summary>
+            <param name="clientId">Ідентифікатор клієнта</param>
+            <returns>Словник, де ключ - ідентифікатор підписки, значення - опис підписки</returns>
+            <remarks>
+            Метод використовує ReadLock, оскільки він тільки читає стан сховища.
+            Повертає словник для зручного доступу та відображення інформації про підписки.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractSubscriptionStore`3.GetClientsForEvent(`1,`2)">
+            <summary>
+            Отримує список клієнтів, які повинні отримати подію певного типу з конкретними аргументами.
+            </summary>
+            <param name="args">Аргументи події</param>
+            <param name="eventType">Тип події</param>
+            <returns>Список ідентифікаторів клієнтів</returns>
+            <remarks>
+            Метод використовує ReadLock, оскільки він тільки читає стан сховища.
+            Це критичний метод для роботи системи підписок, він визначає, які клієнти
+            отримують сповіщення про конкретну подію.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractSubscriptionStore`3.GetSubscriptionInfo(System.Int32)">
+            <summary>
+            Отримує інформацію про підписку та її відповідний ідентифікатор у провайдері.
+            </summary>
+            <param name="subscriptionId">Ідентифікатор підписки</param>
+            <returns>Кортеж з інформацією про акаунт та ідентифікатор у провайдері</returns>
+            <remarks>
+            Метод використовує ReadLock, оскільки він тільки читає стан сховища.
+            Ця інформація корисна для взаємодії з зовнішніми системами підписок.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractSubscriptionStore`3.GenerateSubscriptionId">
+            <summary>
+            Генерує новий унікальний ідентифікатор підписки.
+            </summary>
+            <returns>Унікальний ідентифікатор підписки</returns>
+            <remarks>
+            Використовує Interlocked.Increment для потокобезпечного інкременту лічильника.
+            Це дозволяє генерувати унікальні ідентифікатори навіть при паралельних викликах.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractSubscriptionStore`3.Dispose">
+            <summary>
+            Звільняє ресурси, що використовуються сховищем підписок.
+            </summary>
+            <remarks>
+            Звільняє ReaderWriterLockSlim та встановлює прапорець _disposed,
+            щоб уникнути повторної утилізації.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractSubscriptionStore`3.AddSubscriptionCore(`0,System.Int32)">
+            <summary>
+            Базова реалізація додавання підписки до сховища.
+            </summary>
+            <param name="subscription">Об'єкт підписки</param>
+            <param name="providerSubscriptionId">Ідентифікатор підписки у провайдері</param>
+            <remarks>
+            Абстрактний метод, який має бути реалізований у похідних класах.
+            Викликається в контексті WriteLock, тому не потребує додаткової синхронізації.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractSubscriptionStore`3.GetSubscriptionCore(System.Int32)">
+            <summary>
+            Базова реалізація отримання підписки за її ідентифікатором.
+            </summary>
+            <param name="subscriptionId">Ідентифікатор підписки</param>
+            <returns>Об'єкт підписки або null, якщо підписка не знайдена</returns>
+            <remarks>
+            Абстрактний метод, який має бути реалізований у похідних класах.
+            Викликається в контексті ReadLock, тому не потребує додаткової синхронізації.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractSubscriptionStore`3.RemoveSubscriptionCore(System.Guid,System.Int32)">
+            <summary>
+            Базова реалізація видалення підписки клієнта.
+            </summary>
+            <param name="clientId">Ідентифікатор клієнта</param>
+            <param name="subscriptionId">Ідентифікатор підписки</param>
+            <returns>
+            Кортеж, що містить:
+            - Видалену підписку (або null)
+            - Набір клієнтів, які все ще мають цю підписку (або null)
+            - Ідентифікатор підписки у провайдері
+            </returns>
+            <remarks>
+            Абстрактний метод, який має бути реалізований у похідних класах.
+            Викликається в контексті WriteLock, тому не потребує додаткової синхронізації.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractSubscriptionStore`3.UpdateSubscriptionCore(`0)">
+            <summary>
+            Базова реалізація оновлення існуючої підписки.
+            </summary>
+            <param name="subscription">Оновлений об'єкт підписки</param>
+            <remarks>
+            Абстрактний метод, який має бути реалізований у похідних класах.
+            Викликається в контексті WriteLock, тому не потребує додаткової синхронізації.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractSubscriptionStore`3.GetClientSubscriptionIdsCore(System.Guid)">
+            <summary>
+            Базова реалізація отримання ідентифікаторів підписок клієнта.
+            </summary>
+            <param name="clientId">Ідентифікатор клієнта</param>
+            <returns>Список ідентифікаторів підписок</returns>
+            <remarks>
+            Абстрактний метод, який має бути реалізований у похідних класах.
+            Викликається в контексті ReadLock, тому не потребує додаткової синхронізації.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractSubscriptionStore`3.GetClientSubscriptionsInfoCore(System.Guid)">
+            <summary>
+            Базова реалізація отримання інформації про підписки клієнта.
+            </summary>
+            <param name="clientId">Ідентифікатор клієнта</param>
+            <returns>Словник підписок клієнта</returns>
+            <remarks>
+            Абстрактний метод, який має бути реалізований у похідних класах.
+            Викликається в контексті ReadLock, тому не потребує додаткової синхронізації.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractSubscriptionStore`3.GetClientsForEventCore(`1,`2)">
+            <summary>
+            Базова реалізація отримання клієнтів для конкретної події.
+            </summary>
+            <param name="args">Аргументи події</param>
+            <param name="eventType">Тип події</param>
+            <returns>Список ідентифікаторів клієнтів</returns>
+            <remarks>
+            Абстрактний метод, який має бути реалізований у похідних класах.
+            Викликається в контексті ReadLock, тому не потребує додаткової синхронізації.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractSubscriptionStore`3.GetSubscriptionInfoCore(System.Int32)">
+            <summary>
+            Базова реалізація отримання інформації про підписку.
+            </summary>
+            <param name="subscriptionId">Ідентифікатор підписки</param>
+            <returns>Інформація про підписку у формі кортежу</returns>
+            <remarks>
+            Абстрактний метод, який має бути реалізований у похідних класах.
+            Викликається в контексті ReadLock, тому не потребує додаткової синхронізації.
+            </remarks>
+        </member>
+        <member name="T:WsRpcServer.Core.ISubscriptionManager">
+            <summary>
+            Інтерфейс для менеджерів підписок.
+            Визначає контракт для управління підписками клієнтів на події системи.
+            </summary>
+            <remarks>
+            Цей інтерфейс є ключовим для забезпечення реактивної взаємодії між сервером та клієнтами.
+            Він абстрагує логіку підписок, дозволяючи різним реалізаціям використовувати різні стратегії
+            зберігання та обробки підписок (наприклад, in-memory, база даних, розподілене сховище).
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.ISubscriptionManager.Subscribe(System.Guid,System.String,System.Object,System.Threading.CancellationToken)">
+            <summary>
+            Створює підписку на події для клієнта.
+            </summary>
+            <param name="clientId">Ідентифікатор клієнта, який підписується.</param>
+            <param name="account">Акаунт або ресурс для підписки (наприклад, ідентифікатор каналу або теми).</param>
+            <param name="eventTypes">Типи подій, на які клієнт бажає підписатися. Використовується object для гнучкості.</param>
+            <param name="cancellationToken">Токен скасування для асинхронної операції.</param>
+            <returns>Ідентифікатор нової підписки, який клієнт може використовувати для подальших операцій.</returns>
+            <remarks>
+            Метод повертає Task&lt;int&gt;, оскільки створення підписки може вимагати асинхронної взаємодії
+            з зовнішніми системами. Використання object для eventTypes дозволяє підтримувати різні моделі
+            типів подій (enum, string, складні об'єкти) без зміни інтерфейсу.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.ISubscriptionManager.Unsubscribe(System.Guid,System.Int32,System.Threading.CancellationToken)">
+            <summary>
+            Скасовує підписку клієнта.
+            </summary>
+            <param name="clientId">Ідентифікатор клієнта, який скасовує підписку.</param>
+            <param name="subscriptionId">Ідентифікатор підписки для скасування.</param>
+            <param name="cancellationToken">Токен скасування для асинхронної операції.</param>
+            <returns>True, якщо скасування підписки було успішним, інакше False.</returns>
+            <remarks>
+            Повертає Task&lt;bool&gt; для індикації успіху операції, оскільки скасування
+            підписки може не вдатися з різних причин (наприклад, підписка не існує або
+            недостатньо прав для її скасування).
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.ISubscriptionManager.UpdateSubscription(System.Guid,System.Int32,System.Object,System.Threading.CancellationToken)">
+            <summary>
+            Оновлює існуючу підписку.
+            </summary>
+            <param name="clientId">Ідентифікатор клієнта, який оновлює підписку.</param>
+            <param name="subscriptionId">Ідентифікатор підписки для оновлення.</param>
+            <param name="eventTypes">Нові типи подій для підписки.</param>
+            <param name="cancellationToken">Токен скасування для асинхронної операції.</param>
+            <returns>True, якщо оновлення було успішним, інакше False.</returns>
+            <remarks>
+            Цей метод дозволяє змінювати параметри підписки без необхідності її перестворення.
+            Це особливо корисно для сценаріїв, де створення нової підписки може бути витратним.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.ISubscriptionManager.GetClientsForEvent(System.Object,System.Object)">
+            <summary>
+            Отримує список клієнтів, які повинні отримати подію конкретного типу.
+            </summary>
+            <param name="args">Аргументи події, які можуть впливати на фільтрацію підписок.</param>
+            <param name="eventType">Тип події, який визначає, які підписки будуть враховані.</param>
+            <returns>Список ідентифікаторів клієнтів, які підписані на цю подію.</returns>
+            <remarks>
+            Цей метод є ключовим для ефективної доставки подій. Він повинен швидко визначати,
+            які клієнти зацікавлені в конкретній події, уникаючи непотрібних пересилань.
+            Використання object для args та eventType забезпечує гнучкість без прив'язки до конкретних типів.
+            </remarks>
+        </member>
+        <member name="T:WsRpcServer.Core.ISubscriptionStore`3">
+            <summary>
+            Інтерфейс для сховища підписок, який визначає основні операції для збереження та запиту даних про підписки.
+            </summary>
+            <typeparam name="TSubscription">Тип об'єкта підписки. Повинен бути класом.</typeparam>
+            <typeparam name="TEventArgs">Тип аргументів події. Повинен бути класом.</typeparam>
+            <typeparam name="TEventType">Тип події.</typeparam>
+            <remarks>
+            Цей інтерфейс є базовим будівельним блоком системи підписок. Він абстрагує сховище підписок,
+            дозволяючи різним реалізаціям використовувати різні стратегії зберігання (in-memory, база даних, тощо).
+            
+            Використання узагальнених типів (generics) дозволяє:
+            1. Типобезпечну роботу з різними моделями підписок
+            2. Чітко визначену контрактну взаємодію між компонентами
+            3. Можливість розширення функціоналу без зміни базового інтерфейсу
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.ISubscriptionStore`3.AddSubscription(`0,System.Int32)">
+            <summary>
+            Додає нову підписку до сховища.
+            </summary>
+            <param name="subscription">Об'єкт підписки для додавання.</param>
+            <param name="providerSubscriptionId">Ідентифікатор підписки у зовнішньому провайдері.</param>
+            <remarks>
+            Параметр providerSubscriptionId дозволяє зберігати зв'язок між внутрішніми підписками
+            та їх відповідниками у зовнішніх системах, що є важливим для інтеграційних сценаріїв.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.ISubscriptionStore`3.GetSubscription(System.Int32)">
+            <summary>
+            Отримує підписку за її ідентифікатором.
+            </summary>
+            <param name="subscriptionId">Ідентифікатор підписки.</param>
+            <returns>Об'єкт підписки або null, якщо підписка не знайдена.</returns>
+        </member>
+        <member name="M:WsRpcServer.Core.ISubscriptionStore`3.RemoveSubscription(System.Guid,System.Int32)">
+            <summary>
+            Видаляє підписку клієнта.
+            </summary>
+            <param name="clientId">Ідентифікатор клієнта.</param>
+            <param name="subscriptionId">Ідентифікатор підписки.</param>
+            <returns>
+            Кортеж, що містить:
+            - Видалену підписку (або null)
+            - Набір клієнтів, які все ще мають цю підписку (або null)
+            - Ідентифікатор підписки у зовнішньому провайдері
+            </returns>
+            <remarks>
+            Повернення кортежу з трьома значеннями дозволяє ефективно керувати життєвим циклом підписок.
+            Зокрема, список залишкових клієнтів дозволяє визначити, чи потрібно видаляти підписку 
+            у зовнішньому провайдері, якщо жоден клієнт більше не використовує її.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.ISubscriptionStore`3.UpdateSubscription(`0)">
+            <summary>
+            Оновлює існуючу підписку.
+            </summary>
+            <param name="subscription">Оновлений об'єкт підписки.</param>
+        </member>
+        <member name="M:WsRpcServer.Core.ISubscriptionStore`3.GetClientSubscriptionIds(System.Guid)">
+            <summary>
+            Отримує список ідентифікаторів підписок клієнта.
+            </summary>
+            <param name="clientId">Ідентифікатор клієнта.</param>
+            <returns>Список ідентифікаторів підписок.</returns>
+            <remarks>
+            Корисно для відстеження всіх підписок клієнта, наприклад, для очищення при відключенні.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.ISubscriptionStore`3.GetClientSubscriptionsInfo(System.Guid)">
+            <summary>
+            Отримує інформацію про підписки клієнта.
+            </summary>
+            <param name="clientId">Ідентифікатор клієнта.</param>
+            <returns>Словник, де ключ - ідентифікатор підписки, значення - опис підписки.</returns>
+            <remarks>
+            Цей метод є розширенням GetClientSubscriptionIds, надаючи додаткову інформацію
+            для відображення або діагностики.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.ISubscriptionStore`3.GetClientsForEvent(`1,`2)">
+            <summary>
+            Отримує список клієнтів, які повинні отримати подію.
+            </summary>
+            <param name="args">Аргументи події, які можуть впливати на фільтрацію підписок.</param>
+            <param name="eventType">Тип події, який визначає, які підписки будуть враховані.</param>
+            <returns>Список ідентифікаторів клієнтів, які підписані на цю подію.</returns>
+            <remarks>
+            Критичний метод для продуктивності системи підписок. Повинен ефективно фільтрувати
+            підписки для мінімізації непотрібних сповіщень.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.ISubscriptionStore`3.GenerateSubscriptionId">
+            <summary>
+            Генерує новий унікальний ідентифікатор підписки.
+            </summary>
+            <returns>Унікальний ідентифікатор підписки.</returns>
+            <remarks>
+            Виділено в окремий метод для забезпечення консистентної генерації ідентифікаторів
+            та можливості перевизначення логіки в конкретних реалізаціях.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.ISubscriptionStore`3.GetSubscriptionInfo(System.Int32)">
+            <summary>
+            Отримує інформацію про підписку у зовнішньому провайдері.
+            </summary>
+            <param name="subscriptionId">Ідентифікатор підписки.</param>
+            <returns>Кортеж з інформацією про акаунт та ідентифікатор у зовнішньому провайдері.</returns>
+            <remarks>
+            Цей метод дозволяє встановити зв'язок між внутрішніми ідентифікаторами підписок
+            та їх відповідниками у зовнішніх системах.
+            </remarks>
+        </member>
+        <member name="T:WsRpcServer.Core.JsonRpcServerConfig">
+            <summary>
+            Конфігурація для JSON-RPC сервера.
+            Використовує record тип для автоматичного створення конструктора та властивостей.
+            </summary>
+            <remarks>
+            Використання record типу замість звичайного класу надає кілька переваг:
+            1. Неявна реалізація конструктора з усіма властивостями
+            2. Автоматична реалізація методів Equals, GetHashCode, Clone, тощо
+            3. Неявна реалізація деконструктора
+            4. Підтримка інших функцій records, як-от with-expressions
+            
+            Це особливо зручно для конфігураційних об'єктів, які часто потребують порівняння
+            та клонування.
+            </remarks>
+        </member>
+        <member name="P:WsRpcServer.Core.JsonRpcServerConfig.Host">
+            <summary>
+            Адреса хоста для прослуховування.
+            За замовчуванням "0.0.0.0", що означає прослуховування на всіх доступних інтерфейсах.
+            </summary>
+            <remarks>
+            Використання "0.0.0.0" дозволяє серверу приймати з'єднання на всіх мережевих інтерфейсах.
+            Для безпеки у виробничому середовищі можна обмежити до конкретного інтерфейсу.
+            </remarks>
+        </member>
+        <member name="P:WsRpcServer.Core.JsonRpcServerConfig.Port">
+            <summary>
+            Порт для прослуховування.
+            За замовчуванням 9000, що є нестандартним портом, щоб уникнути конфліктів.
+            </summary>
+            <remarks>
+            Використання порту нижче 1024 зазвичай потребує підвищених привілеїв у Unix-подібних системах.
+            Порт 9000 є достатньо високим для використання без спеціальних привілеїв.
+            </remarks>
+        </member>
+        <member name="P:WsRpcServer.Core.JsonRpcServerConfig.MaxMessageSizeBytes">
+            <summary>
+            Максимальний розмір повідомлення в байтах.
+            За замовчуванням 100 МБ, що є достатньо великим для більшості випадків.
+            </summary>
+            <remarks>
+            Це обмеження важливе для захисту від атак типу "бомба JSON" або неконтрольованого 
+            споживання пам'яті. Значення встановлено досить високим для підтримки великих повідомлень,
+            але в реальних сценаріях може бути зменшене.
+            </remarks>
+        </member>
+        <member name="P:WsRpcServer.Core.JsonRpcServerConfig.NotificationQueueSize">
+            <summary>
+            Розмір черги сповіщень для кожного клієнта.
+            За замовчуванням 1000, що дозволяє буферизувати багато сповіщень перед відкиданням старих.
+            </summary>
+            <remarks>
+            Використовується з BoundedChannelFullMode.DropOldest для реалізації механізму
+            противотиску (backpressure). Якщо клієнт не встигає обробляти сповіщення,
+            найстаріші будуть відкидатися для запобігання переповненню пам'яті.
+            </remarks>
+        </member>
+        <member name="P:WsRpcServer.Core.JsonRpcServerConfig.PipeThresholdBytes">
+            <summary>
+            Поріг для призупинки запису у канал (у байтах).
+            За замовчуванням 1 МБ, що запобігає надмірному споживанню пам'яті при передачі даних.
+            </summary>
+            <remarks>
+            Використовується з System.IO.Pipelines для контролю потоку даних.
+            Коли буфер запису перевищує цей поріг, запис призупиняється до того моменту,
+            коли читач обробить частину даних, що зменшує ризик вичерпання пам'яті.
+            </remarks>
+        </member>
+        <member name="P:WsRpcServer.Core.JsonRpcServerConfig.NotificationTimeout">
+            <summary>
+            Таймаут для операцій сповіщення.
+            За замовчуванням 5 секунд, що є балансом між надійністю та швидкодією.
+            </summary>
+            <remarks>
+            Цей таймаут використовується для запобігання блокування потоків при надсиланні сповіщень.
+            Якщо клієнт не може прийняти сповіщення протягом цього часу, операція скасовується,
+            що запобігає витоку ресурсів при проблемних клієнтах.
+            </remarks>
+        </member>
+        <member name="T:WsRpcServer.Events.AbstractEventProcessor">
+            <summary>
+            Абстрактний базовий клас для обробників подій.
+            Реалізує базову логіку для управління клієнтами та їх сповіщеннями про події.
+            </summary>
+            <param name="logger">Логер для реєстрації подій обробника.</param>
+            <remarks>
+            Цей клас надає загальну інфраструктуру для обробки подій та управління клієнтами,
+            залишаючи специфічну логіку отримання та обробки подій для реалізації у похідних класах.
+            
+            Використовує ConcurrentDictionary для потокобезпечного зберігання клієнтських обробників,
+            що дозволяє додавати/видаляти клієнтів з різних потоків без додаткової синхронізації.
+            
+            Підтримує "fire and forget" модель для сповіщень, яка не блокує основний потік обробки подій,
+            але при цьому забезпечує належну обробку помилок.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Events.AbstractEventProcessor.#ctor(Microsoft.Extensions.Logging.ILogger)">
+            <summary>
+            Абстрактний базовий клас для обробників подій.
+            Реалізує базову логіку для управління клієнтами та їх сповіщеннями про події.
+            </summary>
+            <param name="logger">Логер для реєстрації подій обробника.</param>
+            <remarks>
+            Цей клас надає загальну інфраструктуру для обробки подій та управління клієнтами,
+            залишаючи специфічну логіку отримання та обробки подій для реалізації у похідних класах.
+            
+            Використовує ConcurrentDictionary для потокобезпечного зберігання клієнтських обробників,
+            що дозволяє додавати/видаляти клієнтів з різних потоків без додаткової синхронізації.
+            
+            Підтримує "fire and forget" модель для сповіщень, яка не блокує основний потік обробки подій,
+            але при цьому забезпечує належну обробку помилок.
+            </remarks>
+        </member>
+        <member name="F:WsRpcServer.Events.AbstractEventProcessor.Logger">
+            <summary>
+            Логер для реєстрації подій обробника.
+            </summary>
+        </member>
+        <member name="F:WsRpcServer.Events.AbstractEventProcessor.ClientHandlers">
+            <summary>
+            Словник клієнтських обробників сповіщень, індексованих за ідентифікатором клієнта.
+            Використовується ConcurrentDictionary для потокобезпечної роботи без додаткового блокування.
+            </summary>
+            <remarks>
+            Кожен клієнт представлений своїм унікальним ідентифікатором (Guid) та функцією обробника,
+            яка викликається для відправки сповіщень цьому клієнту.
+            </remarks>
+        </member>
+        <member name="F:WsRpcServer.Events.AbstractEventProcessor.Cts">
+            <summary>
+            Джерело токенів скасування для контролю життєвого циклу обробника подій.
+            </summary>
+            <remarks>
+            Використовується для координації зупинки фонових завдань при завершенні роботи обробника.
+            Спільний токен скасування забезпечує узгоджену зупинку всіх асинхронних операцій.
+            </remarks>
+        </member>
+        <member name="F:WsRpcServer.Events.AbstractEventProcessor.Subscriptions">
+            <summary>
+            Список зовнішніх підписок, які необхідно звільнити при утилізації обробника.
+            </summary>
+            <remarks>
+            Корисно для відстеження зовнішніх ресурсів (наприклад, підписок на події зовнішніх систем),
+            які необхідно коректно звільнити при завершенні роботи обробника.
+            </remarks>
+        </member>
+        <member name="F:WsRpcServer.Events.AbstractEventProcessor.IsDisposed">
+            <summary>
+            Прапорець, що вказує, чи був обробник утилізований.
+            </summary>
+        </member>
+        <member name="M:WsRpcServer.Events.AbstractEventProcessor.StartAsync(System.Threading.CancellationToken)">
+            <summary>
+            Запускає процес обробки подій.
+            </summary>
+            <param name="cancellationToken">Токен скасування для зупинки обробки подій.</param>
+            <returns>Завдання, яке представляє асинхронну операцію запуску.</returns>
+            <remarks>
+            Базова реалізація лише логує запуск. Похідні класи повинні перевизначити цей метод
+            для ініціалізації своїх специфічних механізмів обробки подій.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Events.AbstractEventProcessor.StopAsync(System.Threading.CancellationToken)">
+            <summary>
+            Зупиняє процес обробки подій.
+            </summary>
+            <param name="cancellationToken">Токен скасування для контролю процесу зупинки.</param>
+            <returns>Завдання, яке представляє асинхронну операцію зупинки.</returns>
+            <remarks>
+            Базова реалізація скасовує внутрішній токен, що має призвести до зупинки всіх
+            асинхронних операцій, які використовують цей токен.
+            
+            Важливо для похідних класів викликати базову реалізацію при перевизначенні.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Events.AbstractEventProcessor.RegisterClient(System.Guid,System.Func{System.String,System.Object[],System.Threading.Tasks.Task})">
+            <summary>
+            Реєструє клієнта для отримання сповіщень про події.
+            </summary>
+            <param name="clientId">Унікальний ідентифікатор клієнта.</param>
+            <param name="notificationHandler">Функція обробник, яка буде викликана для відправки сповіщень клієнту.</param>
+            <exception cref="T:System.ArgumentNullException">Якщо notificationHandler є null.</exception>
+            <remarks>
+            Зберігає функцію обробника у словнику ClientHandlers для подальшого використання
+            при обробці подій, що відповідають підпискам клієнта.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Events.AbstractEventProcessor.UnregisterClient(System.Guid)">
+            <summary>
+            Скасовує реєстрацію клієнта та припиняє надсилання йому сповіщень.
+            </summary>
+            <param name="clientId">Унікальний ідентифікатор клієнта.</param>
+            <remarks>
+            Видаляє функцію обробника зі словника ClientHandlers, що припиняє надсилання
+            сповіщень цьому клієнту. Безпечно працює, навіть якщо клієнт не був зареєстрований.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Events.AbstractEventProcessor.Dispose">
+            <summary>
+            Звільняє ресурси, що використовуються обробником подій.
+            </summary>
+            <remarks>
+            Звільняє CancellationTokenSource та всі зовнішні підписки, зареєстровані у списку Subscriptions.
+            Позначає обробник як утилізований, щоб уникнути повторної утилізації.
+            
+            Важливо для похідних класів викликати базову реалізацію при перевизначенні.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Events.AbstractEventProcessor.NotifyClient(System.Guid,System.String,System.Object)">
+            <summary>
+            Сповіщає конкретного клієнта про подію.
+            </summary>
+            <param name="clientId">Ідентифікатор клієнта.</param>
+            <param name="method">Ім'я методу сповіщення.</param>
+            <param name="eventArgs">Аргументи події, які будуть передані як параметри методу.</param>
+            <remarks>
+            Використовує "fire and forget" патерн з правильною обробкою помилок через Task.ContinueWith.
+            Це дозволяє не блокувати потік обробки подій, очікуючи на завершення відправки сповіщення.
+            
+            При виникненні помилки під час відправки сповіщення, вона логується, і за необхідності
+            може бути викликаний додатковий обробник помилок HandleClientFailure.
+            
+            Важливо: Цей метод не очікує завершення відправки сповіщення. Якщо необхідно
+            синхронізуватися з відправкою, потрібно реалізувати окремий метод.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Events.AbstractEventProcessor.HandleClientFailure(System.Guid)">
+            <summary>
+            Обробляє постійні невдачі клієнта при відправці сповіщень.
+            </summary>
+            <param name="clientId">Ідентифікатор клієнта.</param>
+            <remarks>
+            Порожня реалізація за замовчуванням, яка може бути перевизначена в похідних класах
+            для реалізації спеціальної логіки обробки невдач (наприклад, відключення клієнта
+            після певної кількості помилок).
+            
+            Типові стратегії:
+            - Підрахунок послідовних невдач і відключення після порогу
+            - Експоненційне відтермінування повторних спроб
+            - Тимчасове призупинення сповіщень для проблемного клієнта
+            </remarks>
+        </member>
+        <member name="T:WsRpcServer.Events.IEventProcessor">
+            <summary>
+            Інтерфейс для обробників подій.
+            Визначає контракт для компонентів, які обробляють події системи та перетворюють їх на сповіщення для клієнтів.
+            </summary>
+            <remarks>
+            Цей інтерфейс є ключовим компонентом архітектури, що забезпечує реактивну взаємодію між сервером та клієнтами.
+            Він виступає як посередник, який отримує події від джерел даних (наприклад, баз даних, черг повідомлень, тощо)
+            і перетворює їх на JSON-RPC сповіщення для відправки клієнтам.
+            
+            Реалізації цього інтерфейсу можуть використовувати різні стратегії для обробки подій:
+            - Опитування зовнішніх сервісів (polling)
+            - Підписки на черги повідомлень (message queues)
+            - Потоки подій (event streams)
+            - Вебхуки (webhooks)
+            
+            Кожен клієнт реєструється для отримання подій через метод RegisterClient, що дозволяє
+            обробнику подій знати, куди направляти сповіщення.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Events.IEventProcessor.StartAsync(System.Threading.CancellationToken)">
+            <summary>
+            Запускає процес обробки подій.
+            </summary>
+            <param name="cancellationToken">Токен скасування для зупинки обробки подій.</param>
+            <returns>Завдання, яке представляє асинхронну операцію запуску.</returns>
+            <remarks>
+            Цей метод має ініціювати підключення до джерел подій та почати їх обробку.
+            Зазвичай він запускає фонові задачі, які працюють до виклику StopAsync або скасування токена.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Events.IEventProcessor.StopAsync(System.Threading.CancellationToken)">
+            <summary>
+            Зупиняє процес обробки подій.
+            </summary>
+            <param name="cancellationToken">Токен скасування для контролю процесу зупинки.</param>
+            <returns>Завдання, яке представляє асинхронну операцію зупинки.</returns>
+            <remarks>
+            Цей метод має коректно зупинити всі фонові процеси, від'єднатися від джерел подій,
+            і звільнити ресурси. Важливо реалізувати цей метод з урахуванням можливих таймаутів,
+            щоб уникнути "зависання" при зупинці сервера.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Events.IEventProcessor.RegisterClient(System.Guid,System.Func{System.String,System.Object[],System.Threading.Tasks.Task})">
+            <summary>
+            Реєструє клієнта для отримання сповіщень про події.
+            </summary>
+            <param name="clientId">Унікальний ідентифікатор клієнта.</param>
+            <param name="notificationHandler">Функція обробник, яка буде викликана для відправки сповіщень клієнту.</param>
+            <remarks>
+            Функція notificationHandler приймає два параметри:
+            - Назва методу сповіщення (string)
+            - Масив аргументів сповіщення (object[])
+            
+            Ця функція є мостом між обробником подій та клієнтською сесією. Вона дозволяє
+            обробнику подій відправляти сповіщення клієнту, не знаючи деталей реалізації
+            транспортного рівня (WebSocket, TCP, тощо).
+            
+            Зазвичай ця функція реалізована як метод у класі сесії, який викликає JsonRpc.NotifyAsync.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Events.IEventProcessor.UnregisterClient(System.Guid)">
+            <summary>
+            Скасовує реєстрацію клієнта та припиняє надсилання йому сповіщень.
+            </summary>
+            <param name="clientId">Унікальний ідентифікатор клієнта.</param>
+            <remarks>
+            Цей метод має видалити всі підписки та посилання на клієнта, щоб запобігти
+            витоку пам'яті та відправці сповіщень відключеним клієнтам.
+            
+            Важливий аспект ефективного управління ресурсами сервера.
+            </remarks>
+        </member>
+        <member name="T:WsRpcServer.Events.RpcNotification">
+            <summary>
+            Універсальна модель для JSON-RPC сповіщень.
+            Представляє структуру сповіщення, яке відправляється клієнтам.
+            </summary>
+            <param name="Method">Назва методу сповіщення, який буде викликаний на клієнтській стороні.</param>
+            <param name="Arguments">Масив аргументів, що передаються методу сповіщення.</param>
+            <remarks>
+            Використання record типу замість класу надає переваги:
+            1. Неявна реалізація конструктора з усіма параметрами
+            2. Автоматична реалізація методів Equals, GetHashCode, ToString
+            3. Незмінність (immutability) - важлива властивість для передачі повідомлень
+            
+            Сповіщення використовується в контексті JSON-RPC, де метод представляє 
+            назву сповіщення, а аргументи передаються як параметри цього методу.
+            
+            Незмінність об'єкта (immutability) забезпечує безпечну передачу сповіщень 
+            між різними компонентами системи без ризику зміни стану.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Events.RpcNotification.#ctor(System.String,System.Object[])">
+            <summary>
+            Універсальна модель для JSON-RPC сповіщень.
+            Представляє структуру сповіщення, яке відправляється клієнтам.
+            </summary>
+            <param name="Method">Назва методу сповіщення, який буде викликаний на клієнтській стороні.</param>
+            <param name="Arguments">Масив аргументів, що передаються методу сповіщення.</param>
+            <remarks>
+            Використання record типу замість класу надає переваги:
+            1. Неявна реалізація конструктора з усіма параметрами
+            2. Автоматична реалізація методів Equals, GetHashCode, ToString
+            3. Незмінність (immutability) - важлива властивість для передачі повідомлень
+            
+            Сповіщення використовується в контексті JSON-RPC, де метод представляє 
+            назву сповіщення, а аргументи передаються як параметри цього методу.
+            
+            Незмінність об'єкта (immutability) забезпечує безпечну передачу сповіщень 
+            між різними компонентами системи без ризику зміни стану.
+            </remarks>
+        </member>
+        <member name="P:WsRpcServer.Events.RpcNotification.Method">
+            <summary>Назва методу сповіщення, який буде викликаний на клієнтській стороні.</summary>
+        </member>
+        <member name="P:WsRpcServer.Events.RpcNotification.Arguments">
+            <summary>Масив аргументів, що передаються методу сповіщення.</summary>
+        </member>
+        <member name="T:WsRpcServer.Exceptions.RpcErrorException">
+            <summary>
+            Спеціальний виняток для помилок RPC з підтримкою кодів помилок JSON-RPC.
+            Дозволяє передавати структуровану інформацію про помилки в RPC-відповідях.
+            </summary>
+            <remarks>
+            Цей клас розширює стандартний Exception, додаючи специфічну для JSON-RPC інформацію:
+            - Код помилки (згідно зі специфікацією JSON-RPC)
+            - Додаткові дані про помилку
+            
+            Коли такий виняток виникає в RPC-методі, StreamJsonRpc автоматично перетворює його
+            на відповідне JSON-RPC повідомлення про помилку з правильним кодом та даними.
+            
+            Це дозволяє клієнтам отримувати структуровані помилки та обробляти їх відповідно до типу.
+            </remarks>
+        </member>
+        <member name="P:WsRpcServer.Exceptions.RpcErrorException.ErrorCode">
+            <summary>
+            Код помилки JSON-RPC.
+            </summary>
+            <remarks>
+            Згідно зі специфікацією JSON-RPC 2.0, коди помилок в діапазоні від -32768 до -32000
+            зарезервовані для стандартних помилок протоколу. Коди поза цим діапазоном
+            можуть використовуватися для специфічних для застосунку помилок.
+            
+            Стандартні коди:
+            - -32700: Parse error (помилка розбору)
+            - -32600: Invalid Request (неправильний запит)
+            - -32601: Method not found (метод не знайдено)
+            - -32602: Invalid params (неправильні параметри)
+            - -32603: Internal error (внутрішня помилка)
+            </remarks>
+        </member>
+        <member name="P:WsRpcServer.Exceptions.RpcErrorException.ErrorData">
+            <summary>
+            Додаткові дані про помилку.
+            </summary>
+            <remarks>
+            Можуть містити будь-який серіалізований об'єкт, який надає більше інформації
+            про помилку. Наприклад, детальний опис помилки, трасування стеку,
+            або специфічні для застосунку дані.
+            
+            Ці дані будуть включені в поле "data" JSON-RPC відповіді про помилку.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Exceptions.RpcErrorException.#ctor(StreamJsonRpc.Protocol.JsonRpcErrorCode,System.String,System.Exception)">
+            <summary>
+            Створює новий екземпляр винятку RPC помилки.
+            </summary>
+            <param name="errorCode">Код помилки JSON-RPC.</param>
+            <param name="message">Повідомлення про помилку.</param>
+            <param name="innerException">Внутрішній виняток, що спричинив цю помилку.</param>
+            <remarks>
+            Цей конструктор створює виняток без додаткових даних,
+            використовуючи лише стандартні поля Exception.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Exceptions.RpcErrorException.#ctor(StreamJsonRpc.Protocol.JsonRpcErrorCode,System.String,System.Object)">
+            <summary>
+            Створює новий екземпляр винятку RPC помилки з додатковими даними.
+            </summary>
+            <param name="errorCode">Код помилки JSON-RPC.</param>
+            <param name="message">Повідомлення про помилку.</param>
+            <param name="errorData">Додаткові дані про помилку.</param>
+            <remarks>
+            Цей конструктор дозволяє включити в виняток структуровані дані,
+            які будуть серіалізовані в JSON-RPC відповідь про помилку.
+            
+            Приклад використання:
+            ```csharp
+            throw new RpcErrorException(
+                JsonRpcErrorCode.InvalidParams,
+                "Невірний формат дати",
+                new { Field = "birthDate", ExpectedFormat = "yyyy-MM-dd" }
+            );
+            ```
+            </remarks>
+        </member>
+        <member name="T:WsRpcServer.Extensions.JsonRpcCoreExtensions">
+            <summary>
+            Методи розширення для реєстрації JSON-RPC сервісів у контейнері DI.
+            </summary>
+        </member>
+        <member name="M:WsRpcServer.Extensions.JsonRpcCoreExtensions.AddJsonRpcCore(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{WsRpcServer.Core.JsonRpcServerConfig})">
+            <summary>
+            Додає основні JSON-RPC сервіси до колекції сервісів.
+            </summary>
+            <param name="services">Колекція сервісів.</param>
+            <param name="configureOptions">Опціональна дія для налаштування сервера.</param>
+            <returns>Колекція сервісів для ланцюжка викликів.</returns>
+        </member>
+        <member name="T:WsRpcServer.Services.AbstractRpcServiceRegistry">
+            <summary>
+            Абстрактний базовий клас для реєстрації RPC-сервісів.
+            Забезпечує базову логіку для виявлення та реєстрації RPC-сервісів у JSON-RPC системі.
+            </summary>
+            <remarks>
+            Цей клас реалізує IRpcServiceRegistry, використовуючи рефлексію для виявлення
+            RPC-сервісів у збірках застосунку. Він розподіляє сервіси на дві категорії:
+            - Звичайні RPC-сервіси (IRpcService) - отримуються з DI-контейнера
+            - Клієнт-залежні RPC-сервіси (IClientAwareRpcService) - створюються для кожного клієнта
+            
+            Використання рефлексії дозволяє уникнути необхідності ручної реєстрації кожного сервісу,
+            що спрощує розробку та підтримку застосунку.
+            
+            Результати сканування збірок кешуються для підвищення продуктивності, оскільки
+            сканування є ресурсоємною операцією.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Services.AbstractRpcServiceRegistry.#ctor(System.IServiceProvider,Microsoft.Extensions.Logging.ILogger)">
+            <summary>
+            Абстрактний базовий клас для реєстрації RPC-сервісів.
+            Забезпечує базову логіку для виявлення та реєстрації RPC-сервісів у JSON-RPC системі.
+            </summary>
+            <remarks>
+            Цей клас реалізує IRpcServiceRegistry, використовуючи рефлексію для виявлення
+            RPC-сервісів у збірках застосунку. Він розподіляє сервіси на дві категорії:
+            - Звичайні RPC-сервіси (IRpcService) - отримуються з DI-контейнера
+            - Клієнт-залежні RPC-сервіси (IClientAwareRpcService) - створюються для кожного клієнта
+            
+            Використання рефлексії дозволяє уникнути необхідності ручної реєстрації кожного сервісу,
+            що спрощує розробку та підтримку застосунку.
+            
+            Результати сканування збірок кешуються для підвищення продуктивності, оскільки
+            сканування є ресурсоємною операцією.
+            </remarks>
+        </member>
+        <member name="F:WsRpcServer.Services.AbstractRpcServiceRegistry.ServiceProvider">
+            <summary>
+            Постачальник сервісів для отримання екземплярів RPC-сервісів.
+            </summary>
+        </member>
+        <member name="F:WsRpcServer.Services.AbstractRpcServiceRegistry.Logger">
+            <summary>
+            Логер для реєстрації подій реєстру сервісів.
+            </summary>
+        </member>
+        <member name="F:WsRpcServer.Services.AbstractRpcServiceRegistry.StandardOptions">
+            <summary>
+            Стандартні опції для цільових об'єктів JSON-RPC.
+            Конфігурує перетворення імен методів у стиль camelCase для сумісності з JavaScript клієнтами.
+            </summary>
+            <remarks>
+            Використання CommonMethodNameTransforms.CamelCase забезпечує сумісність з
+            JavaScript-конвенціями іменування, де методи починаються з малої літери.
+            Наприклад, метод C# "GetUser" буде доступний у клієнті як "getUser".
+            </remarks>
+        </member>
+        <member name="F:WsRpcServer.Services.AbstractRpcServiceRegistry._serviceTypeCache">
+            <summary>
+            Кеш типів сервісів, отриманих через рефлексію.
+            Заповнюється при першому виклику GetServiceTypeCache.
+            </summary>
+        </member>
+        <member name="M:WsRpcServer.Services.AbstractRpcServiceRegistry.GetServiceTypeCache">
+            <summary>
+            Отримує кеш типів сервісів, створюючи його при першому виклику.
+            </summary>
+            <returns>Кеш типів сервісів.</returns>
+            <remarks>
+            Використовує ледачу ініціалізацію (lazy initialization) для створення кешу
+            лише при необхідності, що дозволяє уникнути сканування збірок до першого використання.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Services.AbstractRpcServiceRegistry.RegisterServices(StreamJsonRpc.JsonRpc,System.Guid)">
+            <summary>
+            Реєструє сервіси у екземплярі JSON-RPC.
+            </summary>
+            <param name="jsonRpc">Екземпляр JSON-RPC, в якому будуть зареєстровані сервіси.</param>
+            <param name="clientId">Ідентифікатор клієнта, для якого реєструються сервіси.</param>
+            <remarks>
+            Цей метод виконує наступні дії:
+            1. Отримує кеш типів сервісів (звичайних та клієнт-залежних)
+            2. Для звичайних сервісів - отримує екземпляри з DI-контейнера
+            3. Для клієнт-залежних сервісів - створює нові екземпляри з ідентифікатором клієнта
+            4. Реєструє всі сервіси в наданому екземплярі JsonRpc
+            
+            Використання StreamJsonRpc.JsonRpc.AddLocalRpcTarget дозволяє зробити
+            методи сервісів доступними для виклику через JSON-RPC протокол.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Services.AbstractRpcServiceRegistry.GetTargetAssemblies">
+            <summary>
+            Отримує список збірок, що містять RPC-сервіси.
+            </summary>
+            <returns>Масив збірок для сканування.</returns>
+            <remarks>
+            За замовчуванням повертає всі збірки домену застосунку, крім динамічних.
+            Може бути перевизначений у похідних класах для обмеження кількості збірок
+            або додавання зовнішніх збірок.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Services.AbstractRpcServiceRegistry.IsTargetAssembly(System.Reflection.Assembly)">
+            <summary>
+            Фільтрує збірки для пошуку RPC-сервісів.
+            </summary>
+            <param name="assembly">Збірка для перевірки.</param>
+            <returns>True, якщо збірка містить RPC-сервіси; інакше False.</returns>
+            <remarks>
+            Метод фільтрує збірки за іменем, перевіряючи, чи збірка є:
+            1. Основною збіркою з інтерфейсом IRpcService
+            2. Збіркою, ім'я якої починається з одного з префіксів, визначених у GetAdditionalAssemblyPrefixes
+            
+            Це дозволяє обмежити сканування лише релевантними збірками,
+            що підвищує продуктивність запуску застосунку.
+            </remarks>
+        </member>
+        <!-- Badly formed XML comment ignored for member "M:WsRpcServer.Services.AbstractRpcServiceRegistry.GetAdditionalAssemblyPrefixes" -->
+        <member name="M:WsRpcServer.Services.AbstractRpcServiceRegistry.BuildServiceTypeCache">
+            <summary>
+            Будує кеш типів сервісів, скануючи збірки застосунку.
+            </summary>
+            <returns>Кеш типів сервісів.</returns>
+            <remarks>
+            Цей метод використовує рефлексію для виявлення:
+            1. Інтерфейсів, що наслідуються від IRpcService або IClientAwareRpcService
+            2. Класів, що реалізують ці інтерфейси
+            
+            Потім він розподіляє знайдені сервіси на дві категорії:
+            - Звичайні RPC-сервіси (IRpcService)
+            - Клієнт-залежні RPC-сервіси (IClientAwareRpcService)
+            
+            Весь цей аналіз виконується один раз при створенні кешу,
+            що підвищує продуктивність при подальших реєстраціях сервісів.
+            </remarks>
+        </member>
+        <member name="T:WsRpcServer.Services.AbstractRpcServiceRegistry.ServiceTypeCache">
+            <summary>
+            Клас для зберігання кешу типів сервісів.
+            </summary>
+            <param name="regularServices">Список звичайних RPC-сервісів.</param>
+            <param name="clientAwareServices">Список клієнт-залежних RPC-сервісів.</param>
+            <remarks>
+            Використовується для зберігання результатів сканування збірок
+            та уникнення повторного сканування при кожній реєстрації сервісів.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Services.AbstractRpcServiceRegistry.ServiceTypeCache.#ctor(System.Collections.Generic.IReadOnlyList{System.Type},System.Collections.Generic.IReadOnlyList{System.ValueTuple{System.Type,System.Type}})">
+            <summary>
+            Клас для зберігання кешу типів сервісів.
+            </summary>
+            <param name="regularServices">Список звичайних RPC-сервісів.</param>
+            <param name="clientAwareServices">Список клієнт-залежних RPC-сервісів.</param>
+            <remarks>
+            Використовується для зберігання результатів сканування збірок
+            та уникнення повторного сканування при кожній реєстрації сервісів.
+            </remarks>
+        </member>
+        <member name="P:WsRpcServer.Services.AbstractRpcServiceRegistry.ServiceTypeCache.RegularServices">
+            <summary>
+            Список інтерфейсів звичайних RPC-сервісів.
+            </summary>
+            <remarks>
+            Ці сервіси отримуються з DI-контейнера під час реєстрації.
+            </remarks>
+        </member>
+        <member name="P:WsRpcServer.Services.AbstractRpcServiceRegistry.ServiceTypeCache.ClientAwareServices">
+            <summary>
+            Список пар (інтерфейс, реалізація) для клієнт-залежних RPC-сервісів.
+            </summary>
+            <remarks>
+            Для цих сервісів створюються нові екземпляри з передачею clientId
+            у конструктор під час реєстрації.
+            </remarks>
+        </member>
+        <!-- Badly formed XML comment ignored for member "T:WsRpcServer.Services.IClientAwareRpcService" -->
+        <member name="T:WsRpcServer.Services.IRpcService">
+            <summary>
+            Інтерфейс для RPC-сервісів.
+            Використовується як маркер для ідентифікації класів, що надають RPC-методи.
+            </summary>
+            <remarks>
+            Цей інтерфейс не містить жодних методів або властивостей, і служить лише для маркування.
+            
+            Використання інтерфейсу-маркера має кілька переваг:
+            1. Дозволяє легко виявляти всі RPC-сервіси в системі через механізм рефлексії
+            2. Надає можливість для централізованої реєстрації сервісів
+            3. Розмежовує звичайні сервіси від RPC-сервісів у DI-контейнері
+            
+            Сервіси, які реалізують цей інтерфейс, будуть автоматично виявлені та зареєстровані
+            в JSON-RPC системі для виклику їх методів з клієнтської сторони.
+            </remarks>
+        </member>
+        <member name="T:WsRpcServer.Services.IRpcServiceRegistry">
+            <summary>
+            Інтерфейс для реєстру RPC-сервісів.
+            Визначає контракт для компонента, який відповідає за реєстрацію RPC-сервісів у JSON-RPC системі.
+            </summary>
+            <remarks>
+            Цей інтерфейс є ключовим для інтеграції RPC-сервісів з StreamJsonRpc бібліотекою.
+            Він забезпечує механізм для автоматичного виявлення та реєстрації сервісів,
+            що дозволяє клієнтам викликати їх методи через JSON-RPC.
+            
+            Основна відповідальність реєстру:
+            1. Виявлення доступних RPC-сервісів у застосунку
+            2. Реєстрація їх як цільових об'єктів (targets) у StreamJsonRpc
+            3. Підтримка клієнт-залежних сервісів з передачею контексту клієнта
+            
+            Цей підхід дозволяє розробникам просто додавати нові RPC-сервіси, 
+            без необхідності вручну реєструвати їх у системі.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Services.IRpcServiceRegistry.RegisterServices(StreamJsonRpc.JsonRpc,System.Guid)">
+            <summary>
+            Реєструє сервіси у екземплярі JSON-RPC.
+            </summary>
+            <param name="jsonRpc">Екземпляр JSON-RPC, в якому будуть зареєстровані сервіси.</param>
+            <param name="clientId">Ідентифікатор клієнта, для якого реєструються сервіси.</param>
+            <remarks>
+            Цей метод викликається для кожного нового клієнтського з'єднання. Він має:
+            1. Знайти всі доступні RPC-сервіси
+            2. Отримати їх екземпляри з DI-контейнера (для звичайних сервісів)
+               або створити нові екземпляри з ідентифікатором клієнта (для клієнт-залежних)
+            3. Зареєструвати їх у наданому екземплярі JsonRpc
+            
+            Для клієнт-залежних сервісів (IClientAwareRpcService) створюються нові
+            екземпляри для кожного клієнта, щоб вони могли зберігати стан клієнта.
+            
+            Внутрішньо використовує StreamJsonRpc.JsonRpc.AddLocalRpcTarget для реєстрації сервісів.
+            </remarks>
+        </member>
+        <member name="T:WsRpcServer.Sessions.AbstractJsonRpcSession">
+            <summary>
+            Абстрактний базовий клас для сесій JSON-RPC WebSocket.
+            Реалізує базову логіку для обробки JSON-RPC повідомлень через WebSocket.
+            </summary>
+            <param name="server">Екземпляр WsServer, до якого належить сесія.</param>
+            <param name="logger">Логер для реєстрації подій сесії.</param>
+            <param name="config">Конфігурація JSON-RPC сервера.</param>
+            <remarks>
+            Цей клас поєднує функціональність NetCoreServer.WsSession для обробки WebSocket з'єднань
+            та StreamJsonRpc для обробки JSON-RPC повідомлень. Він забезпечує асинхронну, неблокуючу
+            обробку повідомлень з використанням каналів (System.Threading.Channels).
+            
+            Використання каналів для черги сповіщень забезпечує:
+            1. Асинхронну, неблокуючу обробку сповіщень
+            2. Контроль потоку даних (backpressure) через обмеження розміру черги
+            3. Надійну доставку сповіщень з можливістю скасування при таймауті
+            
+            Базовий клас реалізує шаблон проектування "Template Method", де загальна логіка
+            визначена тут, а специфічні деталі мають бути реалізовані у похідних класах.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Sessions.AbstractJsonRpcSession.#ctor(NetCoreServer.WsServer,Microsoft.Extensions.Logging.ILogger,WsRpcServer.Core.JsonRpcServerConfig)">
+            <summary>
+            Абстрактний базовий клас для сесій JSON-RPC WebSocket.
+            Реалізує базову логіку для обробки JSON-RPC повідомлень через WebSocket.
+            </summary>
+            <param name="server">Екземпляр WsServer, до якого належить сесія.</param>
+            <param name="logger">Логер для реєстрації подій сесії.</param>
+            <param name="config">Конфігурація JSON-RPC сервера.</param>
+            <remarks>
+            Цей клас поєднує функціональність NetCoreServer.WsSession для обробки WebSocket з'єднань
+            та StreamJsonRpc для обробки JSON-RPC повідомлень. Він забезпечує асинхронну, неблокуючу
+            обробку повідомлень з використанням каналів (System.Threading.Channels).
+            
+            Використання каналів для черги сповіщень забезпечує:
+            1. Асинхронну, неблокуючу обробку сповіщень
+            2. Контроль потоку даних (backpressure) через обмеження розміру черги
+            3. Надійну доставку сповіщень з можливістю скасування при таймауті
+            
+            Базовий клас реалізує шаблон проектування "Template Method", де загальна логіка
+            визначена тут, а специфічні деталі мають бути реалізовані у похідних класах.
+            </remarks>
+        </member>
+        <member name="F:WsRpcServer.Sessions.AbstractJsonRpcSession.Logger">
+            <summary>
+            Логер для реєстрації подій сесії.
+            </summary>
+        </member>
+        <member name="F:WsRpcServer.Sessions.AbstractJsonRpcSession.Cts">
+            <summary>
+            Джерело токенів скасування для контролю життєвого циклу сесії.
+            </summary>
+            <remarks>
+            Використовується для координації зупинки фонових завдань при закритті сесії.
+            </remarks>
+        </member>
+        <member name="F:WsRpcServer.Sessions.AbstractJsonRpcSession.NotificationChannel">
+            <summary>
+            Канал для черги сповіщень, які мають бути відправлені клієнту.
+            </summary>
+            <remarks>
+            Використання Channel.CreateBounded з BoundedChannelFullMode.DropOldest забезпечує:
+            - Обмеження максимального розміру черги для запобігання витоку пам'яті
+            - Відкидання найстаріших сповіщень при переповненні, що забезпечує контроль потоку даних
+            - Асинхронну, неблокуючу обробку сповіщень через модель producer-consumer
+            
+            SingleReader: true - гарантує, що лише один потік читає з каналу, що спрощує обробку
+            SingleWriter: false - дозволяє багатьом потокам додавати сповіщення до черги
+            </remarks>
+        </member>
+        <member name="F:WsRpcServer.Sessions.AbstractJsonRpcSession.Config">
+            <summary>
+            Конфігурація JSON-RPC сервера.
+            </summary>
+        </member>
+        <member name="F:WsRpcServer.Sessions.AbstractJsonRpcSession.JsonRpc">
+            <summary>
+            Екземпляр JSON-RPC для обробки повідомлень.
+            </summary>
+            <remarks>
+            Ініціалізується у похідному класі після встановлення WebSocket з'єднання.
+            Null до моменту завершення рукостискання WebSocket та ініціалізації JSON-RPC.
+            </remarks>
+        </member>
+        <member name="F:WsRpcServer.Sessions.AbstractJsonRpcSession.NotificationProcessingTask">
+            <summary>
+            Завдання для фонової обробки сповіщень.
+            </summary>
+            <remarks>
+            Зберігає посилання на асинхронне завдання, яке обробляє чергу сповіщень.
+            Використовується для відстеження статусу обробки та коректного завершення.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Sessions.AbstractJsonRpcSession.SendNotificationAsync(System.String,System.Object[])">
+            <summary>
+            Надсилає сповіщення клієнту.
+            </summary>
+            <param name="method">Ім'я методу сповіщення.</param>
+            <param name="args">Аргументи сповіщення.</param>
+            <returns>Завдання, яке представляє асинхронну операцію відправки.</returns>
+            <remarks>
+            Замість безпосередньої відправки, сповіщення додається до черги (NotificationChannel),
+            яка потім обробляється у фоновому режимі методом ProcessNotificationsAsync.
+            
+            Це забезпечує:
+            1. Неблокуючу відправку сповіщень (метод повертається миттєво)
+            2. Буферизацію сповіщень, якщо клієнт не встигає їх обробляти
+            3. Контроль потоку даних через обмеження розміру черги
+            
+            Якщо черга заповнена, найстаріші сповіщення відкидаються (BoundedChannelFullMode.DropOldest),
+            що запобігає блокуванню потоків відправки при повільному клієнті.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Sessions.AbstractJsonRpcSession.ProcessNotificationsAsync(System.Threading.CancellationToken)">
+            <summary>
+            Запускає обробку сповіщень у фоновому режимі.
+            </summary>
+            <param name="cancellationToken">Токен скасування для зупинки обробки.</param>
+            <returns>Завдання, яке представляє асинхронну операцію обробки сповіщень.</returns>
+            <remarks>
+            Цей метод запускає цикл, який:
+            1. Чекає на нові сповіщення з каналу NotificationChannel
+            2. Відправляє їх клієнту через JsonRpc.NotifyAsync
+            3. Обробляє помилки та таймаути
+            
+            Важливі аспекти реалізації:
+            - Використання await foreach для асинхронного читання з каналу
+            - Використання таймаутів для запобігання блокуванню при відправці
+            - Коректна обробка помилок, включаючи ConnectionLostException
+            - Продовження роботи навіть при помилках з окремими сповіщеннями
+            
+            Метод завершується, коли:
+            - Канал закривається (NotificationChannel.Writer.Complete())
+            - Виникає ConnectionLostException (з'єднання з клієнтом втрачено)
+            - Відбувається скасування через токен cancellationToken
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Sessions.AbstractJsonRpcSession.Close(System.Net.WebSockets.WebSocketCloseStatus,System.String)">
+            <summary>
+            Закриває WebSocket з'єднання з вказаним статусом та причиною.
+            </summary>
+            <param name="status">Статус закриття WebSocket.</param>
+            <param name="reason">Причина закриття з'єднання.</param>
+            <remarks>
+            Метод передає відповідний код статусу та причину клієнту при закритті з'єднання.
+            Це дозволяє клієнту розуміти, чому з'єднання було закрито (наприклад, нормальне закриття,
+            помилка протоколу, тощо).
+            
+            Внутрішньо використовує метод Close з базового класу NetCoreServer.WsSession.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Sessions.AbstractJsonRpcSession.SendBinaryDataAsync(System.ReadOnlyMemory{System.Byte})">
+            <summary>
+            Надсилає бінарні дані через WebSocket з'єднання.
+            </summary>
+            <param name="data">Дані для надсилання.</param>
+            <returns>Завдання, яке представляє асинхронну операцію відправки.</returns>
+            <remarks>
+            Цей метод забезпечує низькорівневий доступ до відправки бінарних даних через WebSocket.
+            Використовується для випадків, коли потрібна ефективна передача бінарних даних без 
+            накладних витрат на серіалізацію JSON.
+            
+            Внутрішньо використовує метод SendBinaryAsync з базового класу NetCoreServer.WsSession.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Sessions.AbstractJsonRpcSession.OnWsPing(System.Byte[],System.Int64,System.Int64)">
+            <summary>
+            Обробляє WebSocket повідомлення ping.
+            Викликається NetCoreServer при отриманні ping кадру.
+            </summary>
+            <param name="buffer">Буфер з даними ping повідомлення.</param>
+            <param name="offset">Зміщення в буфері.</param>
+            <param name="size">Розмір даних.</param>
+            <remarks>
+            Перевизначення методу OnWsPing з базового класу NetCoreServer.WsSession.
+            Викликає базову реалізацію, яка автоматично надсилає pong відповідь.
+            
+            Додатково логує отримання ping повідомлення для діагностики.
+            
+            Використання ключового слова "new" замість "override" пов'язано з тим,
+            що базовий клас (NetCoreServer.WsSession) не позначає цей метод як virtual.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Sessions.AbstractJsonRpcSession.Dispose(System.Boolean)">
+            <summary>
+            Звільняє ресурси, що використовуються сесією.
+            </summary>
+            <param name="disposing">Вказує, чи викликається метод явно (true) чи з фіналізатора (false).</param>
+            <remarks>
+            Перевизначення методу Dispose з базового класу для забезпечення коректного звільнення ресурсів:
+            - Скасовує всі асинхронні операції через Cts
+            - Завершує канал сповіщень
+            - Викликає базову реалізацію для звільнення ресурсів базового класу
+            
+            Важливо для похідних класів викликати базову реалізацію при перевизначенні.
+            </remarks>
+        </member>
+        <member name="T:WsRpcServer.Sessions.IJsonRpcSession">
+            <summary>
+            Інтерфейс для JSON-RPC сесій.
+            Визначає контракт для клієнтських сесій, які використовують JSON-RPC через WebSocket.
+            </summary>
+            <remarks>
+            Цей інтерфейс абстрагує деталі WebSocket комунікації та надає високорівневий API
+            для роботи з JSON-RPC сесіями. Він діє як міст між транспортним рівнем (WebSocket)
+            та рівнем протоколу (JSON-RPC).
+            
+            Кожна сесія представляє одного підключеного клієнта і забезпечує методи для
+            надсилання йому сповіщень та керування з'єднанням.
+            </remarks>
+        </member>
+        <member name="P:WsRpcServer.Sessions.IJsonRpcSession.Id">
+            <summary>
+            Унікальний ідентифікатор сесії.
+            </summary>
+            <remarks>
+            Використовується для ідентифікації клієнта в системі підписок та обробників подій.
+            Guid обраний як тип ідентифікатора для забезпечення глобальної унікальності 
+            та відсутності колізій навіть у розподіленому середовищі.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Sessions.IJsonRpcSession.SendNotificationAsync(System.String,System.Object[])">
+            <summary>
+            Відправляє сповіщення клієнту.
+            </summary>
+            <param name="method">Ім'я методу сповіщення.</param>
+            <param name="args">Аргументи сповіщення.</param>
+            <returns>Завдання, яке представляє асинхронну операцію відправки.</returns>
+            <remarks>
+            Цей метод формує та відправляє сповіщення JSON-RPC клієнту.
+            Внутрішньо він використовує StreamJsonRpc для серіалізації та відправки сповіщення.
+            
+            Параметри:
+            - method: відповідає полю "method" у JSON-RPC сповіщенні
+            - args: відповідає полю "params" у JSON-RPC сповіщенні
+            
+            Метод має повертати Task, щоб забезпечити асинхронну роботу без блокування потоків.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Sessions.IJsonRpcSession.SendBinaryDataAsync(System.ReadOnlyMemory{System.Byte})">
+            <summary>
+            Відправляє бінарні дані клієнту.
+            </summary>
+            <param name="data">Бінарні дані для відправки.</param>
+            <returns>Завдання, яке представляє асинхронну операцію відправки.</returns>
+            <remarks>
+            Цей метод дозволяє відправляти низькорівневі бінарні дані безпосередньо через WebSocket.
+            Це може бути корисно для оптимізації передачі великих бінарних даних, оминаючи 
+            накладні витрати на серіалізацію JSON.
+            
+            Зазвичай використовується для спеціалізованих сценаріїв, таких як передача файлів,
+            потокове відео або аудіо, тощо.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Sessions.IJsonRpcSession.Close(System.Net.WebSockets.WebSocketCloseStatus,System.String)">
+            <summary>
+            Закриває WebSocket з'єднання з вказаним статусом та причиною.
+            </summary>
+            <param name="status">Статус закриття WebSocket.</param>
+            <param name="reason">Причина закриття з'єднання.</param>
+            <remarks>
+            Цей метод дозволяє коректно завершити WebSocket з'єднання, надаючи клієнту
+            інформацію про причину закриття. Це важливо для правильної обробки закриття
+            на стороні клієнта.
+            
+            Статуси закриття визначені у специфікації WebSocket (RFC 6455) і включають:
+            - 1000: Normal Closure (нормальне закриття)
+            - 1001: Going Away (сервер відключається)
+            - 1002: Protocol Error (помилка протоколу)
+            - 1003: Unsupported Data (непідтримуваний тип даних)
+            - ...і багато інших
+            </remarks>
+        </member>
+        <member name="T:WsRpcServer.Subscriptions.AbstractSubscriptionManager">
+            <summary>
+            Абстрактний базовий клас для менеджерів підписок.
+            Реалізує базову логіку для управління підписками клієнтів.
+            </summary>
+            <param name="logger">Логер для реєстрації подій менеджера.</param>
+            <param name="maxSubscriptionsPerClient">Максимальна кількість підписок на одного клієнта.</param>
+            <remarks>
+            Цей клас забезпечує базову інфраструктуру для менеджерів підписок, включаючи:
+            - Потокобезпечне управління кількістю підписок клієнтів
+            - Обмеження максимальної кількості підписок на клієнта
+            - Синхронізацію доступу до спільних ресурсів через SemaphoreSlim
+            
+            Реалізує інтерфейс ISubscriptionManager, залишаючи конкретну логіку
+            управління підписками для реалізації у похідних класах.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Subscriptions.AbstractSubscriptionManager.#ctor(Microsoft.Extensions.Logging.ILogger,System.Int32)">
+            <summary>
+            Абстрактний базовий клас для менеджерів підписок.
+            Реалізує базову логіку для управління підписками клієнтів.
+            </summary>
+            <param name="logger">Логер для реєстрації подій менеджера.</param>
+            <param name="maxSubscriptionsPerClient">Максимальна кількість підписок на одного клієнта.</param>
+            <remarks>
+            Цей клас забезпечує базову інфраструктуру для менеджерів підписок, включаючи:
+            - Потокобезпечне управління кількістю підписок клієнтів
+            - Обмеження максимальної кількості підписок на клієнта
+            - Синхронізацію доступу до спільних ресурсів через SemaphoreSlim
+            
+            Реалізує інтерфейс ISubscriptionManager, залишаючи конкретну логіку
+            управління підписками для реалізації у похідних класах.
+            </remarks>
+        </member>
+        <member name="F:WsRpcServer.Subscriptions.AbstractSubscriptionManager.Logger">
+            <summary>
+            Логер для реєстрації подій менеджера підписок.
+            </summary>
+        </member>
+        <member name="F:WsRpcServer.Subscriptions.AbstractSubscriptionManager.OperationLock">
+            <summary>
+            Семафор для синхронізації операцій з підписками.
+            </summary>
+            <remarks>
+            SemaphoreSlim використовується для синхронізації доступу до спільних ресурсів
+            при операціях з підписками. Це дозволяє безпечно виконувати операції з різних потоків,
+            уникаючи проблем з паралельним доступом.
+            
+            Ініціалізується з початковою кількістю 1 та максимальною кількістю 1,
+            що означає, що лише один потік може одночасно виконувати операції з підписками.
+            </remarks>
+        </member>
+        <member name="F:WsRpcServer.Subscriptions.AbstractSubscriptionManager.ClientSubscriptionCounts">
+            <summary>
+            Словник для відстеження кількості підписок кожного клієнта.
+            </summary>
+            <remarks>
+            ConcurrentDictionary використовується для потокобезпечного зберігання кількості
+            підписок кожного клієнта. Це дозволяє швидко перевіряти обмеження на кількість
+            підписок без необхідності додаткової синхронізації.
+            
+            Ключ: Guid - ідентифікатор клієнта
+            Значення: int - кількість підписок клієнта
+            </remarks>
+        </member>
+        <member name="F:WsRpcServer.Subscriptions.AbstractSubscriptionManager.MaxSubscriptionsPerClient">
+            <summary>
+            Максимальна кількість підписок на одного клієнта.
+            </summary>
+            <remarks>
+            Це обмеження запобігає зловживанню ресурсами сервера окремими клієнтами.
+            За замовчуванням встановлено значення 10, яке можна змінити через конструктор.
+            </remarks>
+        </member>
+        <member name="F:WsRpcServer.Subscriptions.AbstractSubscriptionManager.IsDisposed">
+            <summary>
+            Прапорець, що вказує, чи був менеджер утилізований.
+            </summary>
+        </member>
+        <member name="M:WsRpcServer.Subscriptions.AbstractSubscriptionManager.Subscribe(System.Guid,System.String,System.Object,System.Threading.CancellationToken)">
+            <summary>
+            Створює підписку на події для клієнта.
+            </summary>
+            <param name="clientId">Ідентифікатор клієнта.</param>
+            <param name="account">Акаунт для підписки.</param>
+            <param name="eventTypes">Типи подій для підписки.</param>
+            <param name="cancellationToken">Токен скасування.</param>
+            <returns>Ідентифікатор підписки.</returns>
+            <remarks>
+            Абстрактний метод, який має бути реалізований у похідних класах.
+            Повинен забезпечувати:
+            - Перевірку обмеження на кількість підписок клієнта
+            - Створення та збереження підписки
+            - Повернення унікального ідентифікатора підписки
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Subscriptions.AbstractSubscriptionManager.Unsubscribe(System.Guid,System.Int32,System.Threading.CancellationToken)">
+            <summary>
+            Скасовує підписку клієнта.
+            </summary>
+            <param name="clientId">Ідентифікатор клієнта.</param>
+            <param name="subscriptionId">Ідентифікатор підписки.</param>
+            <param name="cancellationToken">Токен скасування.</param>
+            <returns>True, якщо скасування підписки було успішним, інакше False.</returns>
+            <remarks>
+            Абстрактний метод, який має бути реалізований у похідних класах.
+            Повинен забезпечувати:
+            - Видалення підписки зі сховища
+            - Оновлення лічильника підписок клієнта
+            - Звільнення пов'язаних ресурсів (наприклад, зовнішніх підписок)
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Subscriptions.AbstractSubscriptionManager.UpdateSubscription(System.Guid,System.Int32,System.Object,System.Threading.CancellationToken)">
+            <summary>
+            Оновлює підписку.
+            </summary>
+            <param name="clientId">Ідентифікатор клієнта.</param>
+            <param name="subscriptionId">Ідентифікатор підписки.</param>
+            <param name="eventTypes">Нові типи подій.</param>
+            <param name="cancellationToken">Токен скасування.</param>
+            <returns>True, якщо оновлення було успішним, інакше False.</returns>
+            <remarks>
+            Абстрактний метод, який має бути реалізований у похідних класах.
+            Повинен забезпечувати:
+            - Перевірку існування підписки
+            - Перевірку прав доступу клієнта до підписки
+            - Оновлення типів подій підписки
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Subscriptions.AbstractSubscriptionManager.GetClientsForEvent(System.Object,System.Object)">
+            <summary>
+            Отримує клієнтів, які повинні отримати подію.
+            </summary>
+            <param name="args">Аргументи події.</param>
+            <param name="eventType">Тип події.</param>
+            <returns>Список ідентифікаторів клієнтів.</returns>
+            <remarks>
+            Абстрактний метод, який має бути реалізований у похідних класах.
+            Повинен забезпечувати:
+            - Фільтрацію підписок за типом події
+            - Фільтрацію підписок за аргументами події (якщо потрібно)
+            - Повернення списку клієнтів, які підписані на цю подію
+            
+            Цей метод є критичним для продуктивності системи підписок.
+            Він повинен бути оптимізований для швидкого визначення отримувачів події.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Subscriptions.AbstractSubscriptionManager.Dispose">
+            <summary>
+            Звільняє ресурси, що використовуються менеджером підписок.
+            </summary>
+            <remarks>
+            Звільняє SemaphoreSlim та встановлює прапорець IsDisposed,
+            щоб уникнути повторної утилізації.
+            
+            Віртуальний метод дозволяє похідним класам розширювати логіку утилізації,
+            зберігаючи базову функціональність.
+            </remarks>
+        </member>
+        <member name="T:WsRpcServer.Transport.WebSocketMessageHandler">
+            <summary>
+            Обробник повідомлень WebSocket, що інтегрує NetCoreServer із StreamJsonRpc.
+            Забезпечує ефективну обробку повідомлень з буферизацією та обробкою помилок.
+            </summary>
+        </member>
+        <member name="M:WsRpcServer.Transport.WebSocketMessageHandler.ProcessReceivedDataAsync(System.ReadOnlyMemory{System.Byte})">
+            <summary>
+            Обробляє отримані дані WebSocket, записуючи їх у канал.
+            Підтримує фрагментацію повідомлень шляхом накопичення даних до отримання повного повідомлення.
+            </summary>
+        </member>
+        <member name="M:WsRpcServer.Transport.WebSocketMessageHandler.StreamJsonRpc#Reflection#IJsonRpcMessageBufferManager#DeserializationComplete(StreamJsonRpc.Protocol.JsonRpcMessage)">
+            <summary>
+            Реалізує IJsonRpcMessageBufferManager.DeserializationComplete для належного управління життєвим циклом буфера повідомлень.
+            </summary>
+        </member>
+        <member name="M:WsRpcServer.Transport.WebSocketMessageHandler.ReadCoreAsync(System.Threading.CancellationToken)">
+            <summary>
+            Читає повідомлення JSON-RPC з каналу, підтримуючи фрагментовані повідомлення WebSocket.
+            </summary>
+        </member>
+        <member name="M:WsRpcServer.Transport.WebSocketMessageHandler.FindNextJsonDelimiter(System.Buffers.ReadOnlySequence{System.Byte},System.Int32)">
+            <summary>
+            Знаходить наступний роздільник JSON-об'єкту в буфері
+            </summary>
+        </member>
+        <member name="M:WsRpcServer.Transport.WebSocketMessageHandler.WriteCoreAsync(StreamJsonRpc.Protocol.JsonRpcMessage,System.Threading.CancellationToken)">
+            <summary>
+            Записує повідомлення JSON-RPC у WebSocket з мінімальними виділеннями пам'яті.
+            </summary>
+        </member>
+    </members>
+</doc>
