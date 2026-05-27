@@ -1,0 +1,39 @@
+# Build output
+**/bin/
+**/obj/
+
+# Visual Studio + Rider + VS Code
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.DotSettings.user
+
+# Coverage / test results
+TestResults/
+coverage.cobertura.xml
+*.coverage
+*.coveragexml
+
+# NuGet
+*.nupkg
+*.snupkg
+project.lock.json
+project.fragment.lock.json
+.nuget/
+
+# Rider
+.ReSharper*/
+
+# Backup / temp
+*.bak
+*.tmp
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
