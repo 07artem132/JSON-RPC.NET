@@ -51,13 +51,13 @@
 
 ## Capability 4 — `treat-warnings-errors`
 
-- [ ] 4.1 Edit `src/WsRpcServer/WsRpcServer.csproj` — add `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>` у `<PropertyGroup>`.
-- [ ] 4.2 Edit `tests/WsRpcServer.Tests/WsRpcServer.Tests.csproj` — same.
-- [ ] 4.3 (NOT edit `example/*.csproj` — consumer code залишається lax.)
-- [ ] 4.4 `dotnet build` — 0 errors, 0 warnings (confirmation finalized після #3).
-- [ ] 4.5 `dotnet test --no-build` — 83 passing.
-- [ ] 4.6 Negative-case sanity: temporarily introduce `int unused;` у будь-якому src file → `dotnet build` MUST fail з error CS0219 (not warning). Revert.
-- [ ] 4.7 Commit: `chore(build): enable TreatWarningsAsErrors on lib + tests`.
+- [x] 4.1 Edit `src/WsRpcServer/WsRpcServer.csproj` — add `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>` у `<PropertyGroup>`.
+- [x] 4.2 Edit `tests/WsRpcServer.Tests/WsRpcServer.Tests.csproj` — same.
+- [x] 4.3 (NOT edit `example/*.csproj` — consumer code залишається lax.)
+- [x] 4.4 `dotnet build` — 0 errors, 0 warnings (confirmation finalized після #3).
+- [x] 4.5 `dotnet test --no-build` — 83 passing.
+- [x] 4.6 Negative-case sanity: temporarily introduce `int unused;` у будь-якому src file → `dotnet build` MUST fail з error CS0219 (not warning). Revert.
+- [x] 4.7 Commit: `chore(build): enable TreatWarningsAsErrors on lib + tests`.
 
 ## Release commit (final)
 

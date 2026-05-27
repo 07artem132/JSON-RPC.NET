@@ -2,6 +2,7 @@
 
     <PropertyGroup>
         <TargetFramework>net9.0</TargetFramework>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <DocumentationFile>$(OutputPath)$(AssemblyName).xml</DocumentationFile>
         <NoWarn>$(NoWarn);1591</NoWarn>
