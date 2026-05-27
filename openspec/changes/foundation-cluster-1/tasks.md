@@ -9,10 +9,10 @@
 
 ## Capability 1 — `readme-org-fix`
 
-- [ ] 1.1 Edit `README.md:7` — build-status badge URL: replace `mil-development` substring with `07artem132` (2 occurrences у tag).
-- [ ] 1.2 Edit `README.md:60` — NuGet feed URL: `nuget.pkg.github.com/mil-development/index.json` → `nuget.pkg.github.com/07artem132/index.json`.
-- [ ] 1.3 `grep -c 'mil-development' README.md` — assert 0.
-- [ ] 1.4 Commit: `docs(readme): fix GitHub org references (mil-development → 07artem132)`.
+- [x] 1.1 Edit `README.md:7` — build-status badge URL: replace `mil-development` substring with `07artem132` (2 occurrences у tag).
+- [x] 1.2 Edit `README.md:60` — NuGet feed URL: `nuget.pkg.github.com/mil-development/index.json` → `nuget.pkg.github.com/07artem132/index.json`.
+- [x] 1.3 `grep -c 'mil-development' README.md` — assert 0.
+- [x] 1.4 Commit: `docs(readme): fix GitHub org references (mil-development → 07artem132)`.
 
 ## Capability 2 — `directory-build-props`
 
