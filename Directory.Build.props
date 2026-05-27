@@ -1,0 +1,33 @@
+<Project>
+
+  <PropertyGroup>
+    <!--
+      Shared MSBuild canon for the entire repository.
+      Auto-imported by MSBuild у every *.csproj per the documented convention
+      (https://learn.microsoft.com/visualstudio/msbuild/customize-by-directory).
+
+      foundation-cluster-1 capability `directory-build-props` (1.1.0).
+    -->
+
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!--
+      Default: WARN. Per-csproj override → ERROR у `src/WsRpcServer.csproj`
+      + `tests/WsRpcServer.Tests.csproj` (capability `treat-warnings-errors`).
+      Example projects intentionally lax (consumer-facing demos).
+    -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+
+    <!--
+      Single source of truth for the main NuGet package version.
+      `src/WsRpcServer/WsRpcServer.csproj` references it via
+      $(WsRpcServerPackageVersion); hardcoded <Version> there was 1.0.0.
+      Bumping = одне місце.
+    -->
+    <WsRpcServerPackageVersion>1.1.0</WsRpcServerPackageVersion>
+  </PropertyGroup>
+
+</Project>

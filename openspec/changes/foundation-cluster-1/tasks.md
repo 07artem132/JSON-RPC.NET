@@ -1,6 +1,6 @@
-# Tasks — foundation-cluster-1 (→ 0.2.0)
+# Tasks — foundation-cluster-1 (→ 1.1.0)
 
-4 capabilities, ordered low-risk first. Each lands у власному commit'і. Final commit bundles version bump (`0.1.0 → 0.2.0`) + (optional) CHANGELOG seed.
+4 capabilities, ordered low-risk first. Each lands у власному commit'і. Final commit bundles version bump (`0.1.0 → 1.1.0`) + (optional) CHANGELOG seed.
 
 ## 0. Setup
 
@@ -16,7 +16,7 @@
 
 ## Capability 2 — `directory-build-props`
 
-- [ ] 2.1 Create `Directory.Build.props` у repo root з:
+- [x] 2.1 Create `Directory.Build.props` у repo root з:
   ```xml
   <Project>
     <PropertyGroup>
@@ -24,15 +24,15 @@
       <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
       <Nullable>enable</Nullable>
       <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
-      <WsRpcServerPackageVersion>0.2.0</WsRpcServerPackageVersion>
+      <WsRpcServerPackageVersion>1.1.0</WsRpcServerPackageVersion>
     </PropertyGroup>
   </Project>
   ```
-- [ ] 2.2 Edit `src/WsRpcServer/WsRpcServer.csproj` — replace hardcoded `<Version>` (якщо є) на `<Version>$(WsRpcServerPackageVersion)</Version>` + `<AssemblyVersion>$(WsRpcServerPackageVersion)</AssemblyVersion>` + `<FileVersion>$(WsRpcServerPackageVersion)</FileVersion>`.
-- [ ] 2.3 Remove per-csproj `<Nullable>enable</Nullable>` (тепер inherited from Directory.Build.props): src/WsRpcServer.csproj, tests/WsRpcServer.Tests.csproj, example/SimpleServer.csproj, example/SimpleClient.csproj.
-- [ ] 2.4 `dotnet build` — 0 errors, ≤108 warnings (no change expected; build-props is purely organizational).
-- [ ] 2.5 `dotnet test --no-build` — 83 passing.
-- [ ] 2.6 Commit: `chore(msbuild): centralize props у Directory.Build.props + version property`.
+- [x] 2.2 Edit `src/WsRpcServer/WsRpcServer.csproj` — replace hardcoded `<Version>` (якщо є) на `<Version>$(WsRpcServerPackageVersion)</Version>` + `<AssemblyVersion>$(WsRpcServerPackageVersion)</AssemblyVersion>` + `<FileVersion>$(WsRpcServerPackageVersion)</FileVersion>`.
+- [x] 2.3 Remove per-csproj `<Nullable>enable</Nullable>` (тепер inherited from Directory.Build.props): src/WsRpcServer.csproj, tests/WsRpcServer.Tests.csproj, example/SimpleServer.csproj, example/SimpleClient.csproj.
+- [x] 2.4 `dotnet build` — 0 errors, ≤108 warnings (no change expected; build-props is purely organizational).
+- [x] 2.5 `dotnet test --no-build` — 83 passing.
+- [x] 2.6 Commit: `chore(msbuild): centralize props у Directory.Build.props + version property`.
 
 ## Capability 3 — `warnings-cleanup`
 
@@ -63,7 +63,7 @@
 
 - [ ] 5.1 `dotnet build` final pass; `dotnet test` — 83 passing.
 - [ ] 5.2 `npx -y @fission-ai/openspec@latest validate foundation-cluster-1 --strict` — re-confirm green.
-- [ ] 5.3 (Optional) Initialize `CHANGELOG.md` з 0.2.0 section + 4 capability bullets per `.claude/rules/openspec-workflow.md § CHANGELOG voice template` (TBD коли скажелон lands у `claude-md-scaffold` change). До тих пір — CHANGELOG-less release acceptable.
+- [ ] 5.3 (Optional) Initialize `CHANGELOG.md` з 1.1.0 section + 4 capability bullets per `.claude/rules/openspec-workflow.md § CHANGELOG voice template` (TBD коли скажелон lands у `claude-md-scaffold` change). До тих пір — CHANGELOG-less release acceptable.
 - [ ] 5.4 (Post-merge, separate workflow): archive change + record у future CLAUDE.md "Implemented, merged, archived" list.
 
 ## Notes

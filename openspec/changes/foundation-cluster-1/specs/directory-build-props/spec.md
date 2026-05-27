@@ -10,7 +10,7 @@
 - `<EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>` — `dotnet format` violations become build errors.
 - `<Nullable>enable</Nullable>` — repository-wide NRT context.
 - `<TreatWarningsAsErrors>false</TreatWarningsAsErrors>` — default; per-csproj override у `treat-warnings-errors` capability (only `src/WsRpcServer.csproj` + tests opt in; example/* залишаються lax).
-- `<WsRpcServerPackageVersion>0.2.0</WsRpcServerPackageVersion>` — single source of truth для main NuGet package version. Per-csproj `<Version>` references it via `$(WsRpcServerPackageVersion)`.
+- `<WsRpcServerPackageVersion>1.1.0</WsRpcServerPackageVersion>` — single source of truth для main NuGet package version. Per-csproj `<Version>` references it via `$(WsRpcServerPackageVersion)`.
 
 Per-csproj `<Nullable>enable</Nullable>` declarations SHALL be removed з `src/WsRpcServer.csproj`, `tests/WsRpcServer.Tests.csproj`, `example/SimpleServer.csproj`, `example/SimpleClient.csproj` (inherited from props).
 
@@ -33,4 +33,4 @@ Per-csproj `<Nullable>enable</Nullable>` declarations SHALL be removed з `src/W
 - **GIVEN** `src/WsRpcServer/WsRpcServer.csproj`
 - **WHEN** extracted `<Version>` element value
 - **THEN** value is `$(WsRpcServerPackageVersion)` — not hardcoded numeric string
-- **AND** `Directory.Build.props` defines `WsRpcServerPackageVersion = 0.2.0`
+- **AND** `Directory.Build.props` defines `WsRpcServerPackageVersion = 1.1.0`

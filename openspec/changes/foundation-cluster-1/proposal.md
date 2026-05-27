@@ -1,4 +1,4 @@
-# foundation-cluster-1 — build hygiene + README accuracy (→ 0.2.0)
+# foundation-cluster-1 — build hygiene + README accuracy (→ 1.1.0)
 
 ## Why
 
@@ -6,7 +6,7 @@
 
 Цей change закриває 4 LOW/MEDIUM findings ordered low-risk first, кожен як окремий capability у власному commit'і per CLAUDE.md (майбутній) `audit-debt.md § Working style` "One commit per capability/cluster". Усі 4 capabilities — non-breaking; жодного API surface change; жодного behavioral change.
 
-Цільова версія: **0.2.0** (поточна — implicit 0.1.0; нічого з 1.x немає у NuGet feed'і).
+Цільова версія: **1.1.0** (поточна — `<Version>1.0.0</Version>` у `src/WsRpcServer.csproj:14`; non-breaking foundation work → minor bump per semver).
 
 ## What Changes
 
@@ -28,15 +28,17 @@
 
 - **`readme-org-fix`** modifies:
   - Build status badge: `mil-development` → `07artem132` (line 7).
+  - "Публікація через організацію" sentence (line 56).
   - NuGet feed instructions: `mil-development/index.json` → `07artem132/index.json` (line 60).
   - Coverage badges (lines/methods/branches): paths залишаються `.github/badges/*.svg` — їхня генерація — out of scope (потребує CI, окремий future change).
+  - **Also fixes** stale `mil-development` refs у `src/WsRpcServer/WsRpcServer.csproj:15,18` (`PackageProjectUrl` + `RepositoryUrl`) — discovered під час Cap 2 implementation when csproj read; logically belongs to Cap 1 scope, included у Cap 2 commit (no separate commit для one-line csproj edits).
 
 - **`directory-build-props`** creates `Directory.Build.props` у repo root з:
   - `<AnalysisLevel>latest-recommended</AnalysisLevel>`
   - `<EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>`
   - `<Nullable>enable</Nullable>` (lifts per-csproj duplicate; кожен csproj zараз має це окремо)
   - `<TreatWarningsAsErrors>false</TreatWarningsAsErrors>` (default; per-csproj override у `treat-warnings-errors`)
-  - `<WsRpcServerPackageVersion>0.2.0</WsRpcServerPackageVersion>` — single source of truth, eliminate per-csproj `<Version>` hardcoding (як SignalCli.NET pattern).
+  - `<WsRpcServerPackageVersion>1.1.0</WsRpcServerPackageVersion>` — single source of truth, eliminate per-csproj `<Version>` hardcoding (як SignalCli.NET pattern). Replaces existing `<Version>1.0.0</Version>` + duplicate `<AssemblyVersion>1.0.0</AssemblyVersion>` (declared двічі!) + `<FileVersion>1.0.0</FileVersion>` у `WsRpcServer.csproj`.
 
 - **`warnings-cleanup`** fixes:
   - ~90 nullability mismatches у `tests/WsRpcServer.Tests/Transport/WebSocketMessageHandlerTests.cs` + `tests/.../Sessions/TestJsonRpcSession.cs` (CS8602/CS8605/CS8620 у Moq logger formatters).
@@ -73,4 +75,4 @@
 - **Composition root completeness** (H1) — окремий `composition-root-complete` change. Це HIGH severity; пишемо окрему OpenSpec proposal з design.md що описує generic-параметризовану signature.
 - **Dispose async pattern** (H4), **JSON parse throttling** (H2), **Service registry thread-safety** (H3) — окремі HIGH-severity changes.
 - **CLAUDE.md / `.claude/rules/` scaffold** — окремий low-priority `claude-md-scaffold` change.
-- **WsRpcServerPackageVersion bump до 0.2.0** — landed у capability `directory-build-props`. Consumer-facing artifact: NuGet package version bumps.
+- **WsRpcServerPackageVersion bump до 1.1.0** — landed у capability `directory-build-props`. Consumer-facing artifact: NuGet package version bumps.
