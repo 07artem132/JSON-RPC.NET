@@ -37,7 +37,7 @@ public abstract class AbstractJsonRpcSession(
     /// <summary>
     /// Логер для реєстрації подій сесії.
     /// </summary>
-    protected readonly ILogger Logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    protected ILogger Logger { get; } = logger ?? throw new ArgumentNullException(nameof(logger));
 
     /// <summary>
     /// Джерело токенів скасування для контролю життєвого циклу сесії.
@@ -45,7 +45,7 @@ public abstract class AbstractJsonRpcSession(
     /// <remarks>
     /// Використовується для координації зупинки фонових завдань при закритті сесії.
     /// </remarks>
-    protected readonly CancellationTokenSource Cts = new();
+    protected CancellationTokenSource Cts { get; } = new();
 
     /// <summary>
     /// Канал для черги сповіщень, які мають бути відправлені клієнту.
@@ -55,11 +55,11 @@ public abstract class AbstractJsonRpcSession(
     /// - Обмеження максимального розміру черги для запобігання витоку пам'яті
     /// - Відкидання найстаріших сповіщень при переповненні, що забезпечує контроль потоку даних
     /// - Асинхронну, неблокуючу обробку сповіщень через модель producer-consumer
-    /// 
+    ///
     /// SingleReader: true - гарантує, що лише один потік читає з каналу, що спрощує обробку
     /// SingleWriter: false - дозволяє багатьом потокам додавати сповіщення до черги
     /// </remarks>
-    protected readonly Channel<RpcNotification> NotificationChannel = Channel.CreateBounded<RpcNotification>(
+    protected Channel<RpcNotification> NotificationChannel { get; } = Channel.CreateBounded<RpcNotification>(
         new BoundedChannelOptions(config.NotificationQueueSize)
         {
             SingleReader = true,
@@ -70,7 +70,7 @@ public abstract class AbstractJsonRpcSession(
     /// <summary>
     /// Конфігурація JSON-RPC сервера.
     /// </summary>
-    protected readonly JsonRpcServerConfig Config = config ?? throw new ArgumentNullException(nameof(config));
+    protected JsonRpcServerConfig Config { get; } = config ?? throw new ArgumentNullException(nameof(config));
 
     /// <summary>
     /// Екземпляр JSON-RPC для обробки повідомлень.
@@ -79,7 +79,7 @@ public abstract class AbstractJsonRpcSession(
     /// Ініціалізується у похідному класі після встановлення WebSocket з'єднання.
     /// Null до моменту завершення рукостискання WebSocket та ініціалізації JSON-RPC.
     /// </remarks>
-    protected JsonRpc? JsonRpc;
+    protected JsonRpc? JsonRpc { get; set; }
 
     /// <summary>
     /// Завдання для фонової обробки сповіщень.
@@ -88,7 +88,7 @@ public abstract class AbstractJsonRpcSession(
     /// Зберігає посилання на асинхронне завдання, яке обробляє чергу сповіщень.
     /// Використовується для відстеження статусу обробки та коректного завершення.
     /// </remarks>
-    protected Task? NotificationProcessingTask;
+    protected Task? NotificationProcessingTask { get; set; }
 
     /// <summary>
     /// Надсилає сповіщення клієнту.
@@ -306,7 +306,7 @@ public abstract class AbstractJsonRpcSession(
     /// <summary>
     /// Звільняє ресурси, що використовуються сесією.
     /// </summary>
-    /// <param name="disposing">Вказує, чи викликається метод явно (true) чи з фіналізатора (false).</param>
+    /// <param name="disposingManagedResources">Вказує, чи викликається метод явно (true) чи з фіналізатора (false).</param>
     /// <remarks>
     /// Перевизначення методу Dispose з базового класу для забезпечення коректного звільнення ресурсів:
     /// - Скасовує всі асинхронні операції через Cts
@@ -315,14 +315,14 @@ public abstract class AbstractJsonRpcSession(
     /// 
     /// Важливо для похідних класів викликати базову реалізацію при перевизначенні.
     /// </remarks>
-    protected override void Dispose(bool disposing)
+    protected override void Dispose(bool disposingManagedResources)
     {
-        if (disposing)
+        if (disposingManagedResources)
         {
             Cts.Dispose();
             NotificationChannel.Writer.TryComplete();
         }
 
-        base.Dispose(disposing);
+        base.Dispose(disposingManagedResources);
     }
 }

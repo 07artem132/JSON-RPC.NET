@@ -28,7 +28,7 @@
             з JSON-RPC, дозволяючи зосередитись на бізнес-логіці, а не на деталях транспортного рівня.
             </remarks>
         </member>
-        <member name="F:WsRpcServer.Core.AbstractJsonRpcServer.ServiceProvider">
+        <member name="P:WsRpcServer.Core.AbstractJsonRpcServer.ServiceProvider">
             <summary>
             Постачальник сервісів для створення екземплярів залежностей.
             Ключовий компонент для інтеграції з DI контейнером та забезпечення доступу до зареєстрованих сервісів.
@@ -225,6 +225,12 @@
             Звільняє ReaderWriterLockSlim та встановлює прапорець _disposed,
             щоб уникнути повторної утилізації.
             </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractSubscriptionStore`3.Dispose(System.Boolean)">
+            <summary>
+            Внутрішня реалізація утилізації, що підтримує патерн Dispose(bool).
+            </summary>
+            <param name="disposing">true, якщо викликано з Dispose(); false з фіналізатора.</param>
         </member>
         <member name="M:WsRpcServer.Core.AbstractSubscriptionStore`3.AddSubscriptionCore(`0,System.Int32)">
             <summary>
@@ -614,12 +620,12 @@
             але при цьому забезпечує належну обробку помилок.
             </remarks>
         </member>
-        <member name="F:WsRpcServer.Events.AbstractEventProcessor.Logger">
+        <member name="P:WsRpcServer.Events.AbstractEventProcessor.Logger">
             <summary>
             Логер для реєстрації подій обробника.
             </summary>
         </member>
-        <member name="F:WsRpcServer.Events.AbstractEventProcessor.ClientHandlers">
+        <member name="P:WsRpcServer.Events.AbstractEventProcessor.ClientHandlers">
             <summary>
             Словник клієнтських обробників сповіщень, індексованих за ідентифікатором клієнта.
             Використовується ConcurrentDictionary для потокобезпечної роботи без додаткового блокування.
@@ -629,7 +635,7 @@
             яка викликається для відправки сповіщень цьому клієнту.
             </remarks>
         </member>
-        <member name="F:WsRpcServer.Events.AbstractEventProcessor.Cts">
+        <member name="P:WsRpcServer.Events.AbstractEventProcessor.Cts">
             <summary>
             Джерело токенів скасування для контролю життєвого циклу обробника подій.
             </summary>
@@ -638,7 +644,7 @@
             Спільний токен скасування забезпечує узгоджену зупинку всіх асинхронних операцій.
             </remarks>
         </member>
-        <member name="F:WsRpcServer.Events.AbstractEventProcessor.Subscriptions">
+        <member name="P:WsRpcServer.Events.AbstractEventProcessor.Subscriptions">
             <summary>
             Список зовнішніх підписок, які необхідно звільнити при утилізації обробника.
             </summary>
@@ -647,7 +653,7 @@
             які необхідно коректно звільнити при завершенні роботи обробника.
             </remarks>
         </member>
-        <member name="F:WsRpcServer.Events.AbstractEventProcessor.IsDisposed">
+        <member name="P:WsRpcServer.Events.AbstractEventProcessor.IsDisposed">
             <summary>
             Прапорець, що вказує, чи був обробник утилізований.
             </summary>
@@ -708,6 +714,12 @@
             
             Важливо для похідних класів викликати базову реалізацію при перевизначенні.
             </remarks>
+        </member>
+        <member name="M:WsRpcServer.Events.AbstractEventProcessor.Dispose(System.Boolean)">
+            <summary>
+            Внутрішня реалізація утилізації, що підтримує патерн Dispose(bool).
+            </summary>
+            <param name="disposing">true, якщо викликано з Dispose(); false з фіналізатора.</param>
         </member>
         <member name="M:WsRpcServer.Events.AbstractEventProcessor.NotifyClient(System.Guid,System.String,System.Object)">
             <summary>
@@ -989,17 +1001,17 @@
             сканування є ресурсоємною операцією.
             </remarks>
         </member>
-        <member name="F:WsRpcServer.Services.AbstractRpcServiceRegistry.ServiceProvider">
+        <member name="P:WsRpcServer.Services.AbstractRpcServiceRegistry.ServiceProvider">
             <summary>
             Постачальник сервісів для отримання екземплярів RPC-сервісів.
             </summary>
         </member>
-        <member name="F:WsRpcServer.Services.AbstractRpcServiceRegistry.Logger">
+        <member name="P:WsRpcServer.Services.AbstractRpcServiceRegistry.Logger">
             <summary>
             Логер для реєстрації подій реєстру сервісів.
             </summary>
         </member>
-        <member name="F:WsRpcServer.Services.AbstractRpcServiceRegistry.StandardOptions">
+        <member name="P:WsRpcServer.Services.AbstractRpcServiceRegistry.StandardOptions">
             <summary>
             Стандартні опції для цільових об'єктів JSON-RPC.
             Конфігурує перетворення імен методів у стиль camelCase для сумісності з JavaScript клієнтами.
@@ -1069,7 +1081,24 @@
             що підвищує продуктивність запуску застосунку.
             </remarks>
         </member>
-        <!-- Badly formed XML comment ignored for member "M:WsRpcServer.Services.AbstractRpcServiceRegistry.GetAdditionalAssemblyPrefixes" -->
+        <member name="M:WsRpcServer.Services.AbstractRpcServiceRegistry.GetAdditionalAssemblyPrefixes">
+            <summary>
+            Префікси для додаткових збірок, що містять RPC-сервіси.
+            </summary>
+            <returns>Колекція префіксів імен збірок.</returns>
+            <remarks>
+            Абстрактний метод, який має бути реалізований у похідних класах.
+            Визначає, які збірки, крім основної, будуть скановані на наявність RPC-сервісів.
+            
+            Приклад реалізації:
+            <code>
+            protected override IEnumerable&lt;string&gt; GetAdditionalAssemblyPrefixes()
+            {
+                return new[] { "MyCompany.Services", "MyCompany.Api" };
+            }
+            </code>
+            </remarks>
+        </member>
         <member name="M:WsRpcServer.Services.AbstractRpcServiceRegistry.BuildServiceTypeCache">
             <summary>
             Будує кеш типів сервісів, скануючи збірки застосунку.
@@ -1127,7 +1156,43 @@
             у конструктор під час реєстрації.
             </remarks>
         </member>
-        <!-- Badly formed XML comment ignored for member "T:WsRpcServer.Services.IClientAwareRpcService" -->
+        <member name="T:WsRpcServer.Services.IClientAwareRpcService">
+             <summary>
+             Інтерфейс для клієнт-залежних RPC-сервісів.
+             Визначає сервіси, які потребують інформацію про клієнта, що викликає методи.
+             </summary>
+             <remarks>
+             Цей інтерфейс наслідується від IRpcService і використовується для ідентифікації
+             сервісів, які потребують контексту клієнта для своєї роботи.
+             
+             Клієнт-залежні сервіси відрізняються від звичайних RPC-сервісів тим, що:
+             1. Вони створюються для кожного клієнта окремо
+             2. Приймають ідентифікатор клієнта (Guid clientId) через конструктор
+             3. Можуть зберігати стан конкретного клієнта
+             
+             При реєстрації таких сервісів, система RpcServiceRegistry автоматично передає
+             ідентифікатор клієнта в конструктор, що дозволяє сервісу знати, який клієнт
+             викликає його методи.
+             
+             Приклад використання:
+             <code>
+             public class UserService : IClientAwareRpcService
+             {
+                 private readonly Guid _clientId;
+            
+                 public UserService(Guid clientId)
+                 {
+                     _clientId = clientId;
+                 }
+            
+                 public Task&lt;UserInfo&gt; GetCurrentUser()
+                 {
+                     // Використання _clientId для ідентифікації користувача
+                 }
+             }
+             </code>
+             </remarks>
+        </member>
         <member name="T:WsRpcServer.Services.IRpcService">
             <summary>
             Інтерфейс для RPC-сервісів.
@@ -1227,12 +1292,12 @@
             визначена тут, а специфічні деталі мають бути реалізовані у похідних класах.
             </remarks>
         </member>
-        <member name="F:WsRpcServer.Sessions.AbstractJsonRpcSession.Logger">
+        <member name="P:WsRpcServer.Sessions.AbstractJsonRpcSession.Logger">
             <summary>
             Логер для реєстрації подій сесії.
             </summary>
         </member>
-        <member name="F:WsRpcServer.Sessions.AbstractJsonRpcSession.Cts">
+        <member name="P:WsRpcServer.Sessions.AbstractJsonRpcSession.Cts">
             <summary>
             Джерело токенів скасування для контролю життєвого циклу сесії.
             </summary>
@@ -1240,26 +1305,26 @@
             Використовується для координації зупинки фонових завдань при закритті сесії.
             </remarks>
         </member>
-        <member name="F:WsRpcServer.Sessions.AbstractJsonRpcSession.NotificationChannel">
-            <summary>
-            Канал для черги сповіщень, які мають бути відправлені клієнту.
-            </summary>
-            <remarks>
-            Використання Channel.CreateBounded з BoundedChannelFullMode.DropOldest забезпечує:
-            - Обмеження максимального розміру черги для запобігання витоку пам'яті
-            - Відкидання найстаріших сповіщень при переповненні, що забезпечує контроль потоку даних
-            - Асинхронну, неблокуючу обробку сповіщень через модель producer-consumer
+        <member name="P:WsRpcServer.Sessions.AbstractJsonRpcSession.NotificationChannel">
+             <summary>
+             Канал для черги сповіщень, які мають бути відправлені клієнту.
+             </summary>
+             <remarks>
+             Використання Channel.CreateBounded з BoundedChannelFullMode.DropOldest забезпечує:
+             - Обмеження максимального розміру черги для запобігання витоку пам'яті
+             - Відкидання найстаріших сповіщень при переповненні, що забезпечує контроль потоку даних
+             - Асинхронну, неблокуючу обробку сповіщень через модель producer-consumer
             
-            SingleReader: true - гарантує, що лише один потік читає з каналу, що спрощує обробку
-            SingleWriter: false - дозволяє багатьом потокам додавати сповіщення до черги
-            </remarks>
+             SingleReader: true - гарантує, що лише один потік читає з каналу, що спрощує обробку
+             SingleWriter: false - дозволяє багатьом потокам додавати сповіщення до черги
+             </remarks>
         </member>
-        <member name="F:WsRpcServer.Sessions.AbstractJsonRpcSession.Config">
+        <member name="P:WsRpcServer.Sessions.AbstractJsonRpcSession.Config">
             <summary>
             Конфігурація JSON-RPC сервера.
             </summary>
         </member>
-        <member name="F:WsRpcServer.Sessions.AbstractJsonRpcSession.JsonRpc">
+        <member name="P:WsRpcServer.Sessions.AbstractJsonRpcSession.JsonRpc">
             <summary>
             Екземпляр JSON-RPC для обробки повідомлень.
             </summary>
@@ -1268,7 +1333,7 @@
             Null до моменту завершення рукостискання WebSocket та ініціалізації JSON-RPC.
             </remarks>
         </member>
-        <member name="F:WsRpcServer.Sessions.AbstractJsonRpcSession.NotificationProcessingTask">
+        <member name="P:WsRpcServer.Sessions.AbstractJsonRpcSession.NotificationProcessingTask">
             <summary>
             Завдання для фонової обробки сповіщень.
             </summary>
@@ -1371,7 +1436,7 @@
             <summary>
             Звільняє ресурси, що використовуються сесією.
             </summary>
-            <param name="disposing">Вказує, чи викликається метод явно (true) чи з фіналізатора (false).</param>
+            <param name="disposingManagedResources">Вказує, чи викликається метод явно (true) чи з фіналізатора (false).</param>
             <remarks>
             Перевизначення методу Dispose з базового класу для забезпечення коректного звільнення ресурсів:
             - Скасовує всі асинхронні операції через Cts
@@ -1491,38 +1556,38 @@
             управління підписками для реалізації у похідних класах.
             </remarks>
         </member>
-        <member name="F:WsRpcServer.Subscriptions.AbstractSubscriptionManager.Logger">
+        <member name="P:WsRpcServer.Subscriptions.AbstractSubscriptionManager.Logger">
             <summary>
             Логер для реєстрації подій менеджера підписок.
             </summary>
         </member>
-        <member name="F:WsRpcServer.Subscriptions.AbstractSubscriptionManager.OperationLock">
-            <summary>
-            Семафор для синхронізації операцій з підписками.
-            </summary>
-            <remarks>
-            SemaphoreSlim використовується для синхронізації доступу до спільних ресурсів
-            при операціях з підписками. Це дозволяє безпечно виконувати операції з різних потоків,
-            уникаючи проблем з паралельним доступом.
+        <member name="P:WsRpcServer.Subscriptions.AbstractSubscriptionManager.OperationLock">
+             <summary>
+             Семафор для синхронізації операцій з підписками.
+             </summary>
+             <remarks>
+             SemaphoreSlim використовується для синхронізації доступу до спільних ресурсів
+             при операціях з підписками. Це дозволяє безпечно виконувати операції з різних потоків,
+             уникаючи проблем з паралельним доступом.
             
-            Ініціалізується з початковою кількістю 1 та максимальною кількістю 1,
-            що означає, що лише один потік може одночасно виконувати операції з підписками.
-            </remarks>
+             Ініціалізується з початковою кількістю 1 та максимальною кількістю 1,
+             що означає, що лише один потік може одночасно виконувати операції з підписками.
+             </remarks>
         </member>
-        <member name="F:WsRpcServer.Subscriptions.AbstractSubscriptionManager.ClientSubscriptionCounts">
-            <summary>
-            Словник для відстеження кількості підписок кожного клієнта.
-            </summary>
-            <remarks>
-            ConcurrentDictionary використовується для потокобезпечного зберігання кількості
-            підписок кожного клієнта. Це дозволяє швидко перевіряти обмеження на кількість
-            підписок без необхідності додаткової синхронізації.
+        <member name="P:WsRpcServer.Subscriptions.AbstractSubscriptionManager.ClientSubscriptionCounts">
+             <summary>
+             Словник для відстеження кількості підписок кожного клієнта.
+             </summary>
+             <remarks>
+             ConcurrentDictionary використовується для потокобезпечного зберігання кількості
+             підписок кожного клієнта. Це дозволяє швидко перевіряти обмеження на кількість
+             підписок без необхідності додаткової синхронізації.
             
-            Ключ: Guid - ідентифікатор клієнта
-            Значення: int - кількість підписок клієнта
-            </remarks>
+             Ключ: Guid - ідентифікатор клієнта
+             Значення: int - кількість підписок клієнта
+             </remarks>
         </member>
-        <member name="F:WsRpcServer.Subscriptions.AbstractSubscriptionManager.MaxSubscriptionsPerClient">
+        <member name="P:WsRpcServer.Subscriptions.AbstractSubscriptionManager.MaxSubscriptionsPerClient">
             <summary>
             Максимальна кількість підписок на одного клієнта.
             </summary>
@@ -1531,7 +1596,7 @@
             За замовчуванням встановлено значення 10, яке можна змінити через конструктор.
             </remarks>
         </member>
-        <member name="F:WsRpcServer.Subscriptions.AbstractSubscriptionManager.IsDisposed">
+        <member name="P:WsRpcServer.Subscriptions.AbstractSubscriptionManager.IsDisposed">
             <summary>
             Прапорець, що вказує, чи був менеджер утилізований.
             </summary>
@@ -1615,6 +1680,12 @@
             Віртуальний метод дозволяє похідним класам розширювати логіку утилізації,
             зберігаючи базову функціональність.
             </remarks>
+        </member>
+        <member name="M:WsRpcServer.Subscriptions.AbstractSubscriptionManager.Dispose(System.Boolean)">
+            <summary>
+            Внутрішня реалізація утилізації, що підтримує патерн Dispose(bool).
+            </summary>
+            <param name="disposing">true, якщо викликано з Dispose(); false з фіналізатора.</param>
         </member>
         <member name="T:WsRpcServer.Transport.WebSocketMessageHandler">
             <summary>

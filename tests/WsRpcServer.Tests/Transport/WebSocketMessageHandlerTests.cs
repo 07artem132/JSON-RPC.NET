@@ -22,6 +22,9 @@ namespace WsRpcServer.Tests.Transport
 {
     public class EnhancedWebSocketMessageHandlerTests
     {
+        private static readonly string[] _subscriptionEventTypes = ["Create", "Update", "Delete"];
+        private static readonly string[] _expectedCancellationExceptions = [nameof(OperationCanceledException), nameof(TaskCanceledException)];
+
         private readonly Mock<IJsonRpcSession> _mockSession;
         private readonly Mock<IJsonRpcMessageFormatter> _mockFormatter;
         private readonly Mock<ILogger<WebSocketMessageHandler>> _mockLogger;
@@ -64,9 +67,9 @@ namespace WsRpcServer.Tests.Transport
                 l => l.Log(
                     LogLevel.Debug,
                     It.IsAny<EventId>(),
-                    It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("Обробка отриманих даних")),
+                    It.Is<It.IsAnyType>((v, t) => v!.ToString()!.Contains("Обробка отриманих даних")),
                     It.IsAny<Exception>(),
-                    It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 Times.Once);
         }
 
@@ -115,9 +118,9 @@ namespace WsRpcServer.Tests.Transport
             {
                 try
                 {
-                    return await ((ValueTask<JsonRpcMessage>)readMethod.Invoke(
+                    return await ((ValueTask<JsonRpcMessage>)readMethod!.Invoke(
                         handler,
-                        new object[] { CancellationToken.None }));
+                        new object[] { CancellationToken.None })!);
                 }
                 catch (JsonException)
                 {
@@ -135,11 +138,11 @@ namespace WsRpcServer.Tests.Transport
             await handler.ProcessReceivedDataAsync(fragment2);
             
             // Now read should complete successfully
-            var readTask2 = Task.Run(async () => 
+            var readTask2 = Task.Run(async () =>
             {
-                return await ((ValueTask<JsonRpcMessage>)readMethod.Invoke(
+                return await ((ValueTask<JsonRpcMessage>)readMethod!.Invoke(
                     handler,
-                    new object[] { CancellationToken.None }));
+                    new object[] { CancellationToken.None })!);
             });
 
             var result = await readTask2;
@@ -198,17 +201,17 @@ namespace WsRpcServer.Tests.Transport
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
 
             // Act - first read should succeed
-            var firstResult = await ((ValueTask<JsonRpcMessage>)readMethod.Invoke(
+            var firstResult = await ((ValueTask<JsonRpcMessage>)readMethod!.Invoke(
                 handler,
-                new object[] { CancellationToken.None }));
+                new object[] { CancellationToken.None })!);
             
             // Send the invalid JSON
             await handler.ProcessReceivedDataAsync(Encoding.UTF8.GetBytes(invalidJson));
             
             // Second read should fail but recover
-            var secondResult = await ((ValueTask<JsonRpcMessage>)readMethod.Invoke(
+            var secondResult = await ((ValueTask<JsonRpcMessage>)readMethod!.Invoke(
                 handler,
-                new object[] { CancellationToken.None }));
+                new object[] { CancellationToken.None })!);
 
             // Assert
             Assert.NotNull(firstResult);
@@ -221,7 +224,7 @@ namespace WsRpcServer.Tests.Transport
                     It.IsAny<EventId>(),
                     It.IsAny<It.IsAnyType>(),
                     It.Is<JsonException>(ex => ex.BytePositionInLine == errorPosition),
-                    It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 Times.Once);
         }
 
@@ -251,9 +254,9 @@ namespace WsRpcServer.Tests.Transport
             // Act - should handle cancellation gracefully (may return null or throw)
             try 
             {
-                var result = await ((ValueTask<JsonRpcMessage>)readMethod.Invoke(
+                var result = await ((ValueTask<JsonRpcMessage>)readMethod!.Invoke(
                     handler,
-                    new object[] { cts.Token }));
+                    new object[] { cts.Token })!);
                 
                 // If it doesn't throw, verify result is null
                 Assert.Null(result);
@@ -262,8 +265,8 @@ namespace WsRpcServer.Tests.Transport
             {
                 // If it throws, verify it's due to cancellation
                 // We need to check the inner exception (from reflection)
-                Assert.Contains(ex.InnerException?.GetType().Name, 
-                    new[] { nameof(OperationCanceledException), nameof(TaskCanceledException) });
+                Assert.Contains(ex.InnerException?.GetType().Name,
+                    _expectedCancellationExceptions);
             }
 
             // Verify cancellation was logged appropriately
@@ -271,10 +274,10 @@ namespace WsRpcServer.Tests.Transport
                 l => l.Log(
                     LogLevel.Debug,
                     It.IsAny<EventId>(),
-                    It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("Операцію") || 
-                                                 v.ToString().Contains("скасовано")),
+                    It.Is<It.IsAnyType>((v, t) => v!.ToString()!.Contains("Операцію") ||
+                                                 v!.ToString()!.Contains("скасовано")),
                     It.IsAny<Exception>(),
-                    It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 Times.AtLeastOnce);
         }
 
@@ -307,9 +310,9 @@ namespace WsRpcServer.Tests.Transport
             // Act & Assert
             var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             {
-                await ((ValueTask)writeMethod.Invoke(
+                await ((ValueTask)writeMethod!.Invoke(
                     handler,
-                    new object[] { testMessage, CancellationToken.None }));
+                    new object[] { testMessage, CancellationToken.None })!);
             });
 
             // Verify that the error was logged
@@ -317,9 +320,9 @@ namespace WsRpcServer.Tests.Transport
                 l => l.Log(
                     LogLevel.Error,
                     It.IsAny<EventId>(),
-                    It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("Помилка надсилання JSON-RPC повідомлення")),
+                    It.Is<It.IsAnyType>((v, t) => v!.ToString()!.Contains("Помилка надсилання JSON-RPC повідомлення")),
                     It.IsAny<Exception>(),
-                    It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 Times.Once);
         }
 
@@ -352,9 +355,9 @@ namespace WsRpcServer.Tests.Transport
             // Act & Assert
             var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             {
-                await ((ValueTask)writeMethod.Invoke(
+                await ((ValueTask)writeMethod!.Invoke(
                     handler,
-                    new object[] { testMessage, CancellationToken.None }));
+                    new object[] { testMessage, CancellationToken.None })!);
             });
 
             // Verify error was logged
@@ -362,9 +365,9 @@ namespace WsRpcServer.Tests.Transport
                 l => l.Log(
                     LogLevel.Error,
                     It.IsAny<EventId>(),
-                    It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("Помилка надсилання JSON-RPC повідомлення")),
+                    It.Is<It.IsAnyType>((v, t) => v!.ToString()!.Contains("Помилка надсилання JSON-RPC повідомлення")),
                     It.IsAny<Exception>(),
-                    It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 Times.Once);
         }
 
@@ -379,7 +382,9 @@ namespace WsRpcServer.Tests.Transport
                 _config);
 
             // Dispose the handler
+#pragma warning disable CS0618 // MessageHandlerBase.Dispose() is obsolete in newer StreamJsonRpc; intentional sync-dispose test.
             handler.Dispose();
+#pragma warning restore CS0618
 
             // Create test data
             var data = Encoding.UTF8.GetBytes("{\"jsonrpc\":\"2.0\",\"method\":\"test\",\"id\":1}");
@@ -404,7 +409,7 @@ namespace WsRpcServer.Tests.Transport
                 _config);
 
             // Act - shouldn't throw
-            ((IJsonRpcMessageBufferManager)handler).DeserializationComplete(null);
+            ((IJsonRpcMessageBufferManager)handler).DeserializationComplete(null!);
 
             // Assert - nothing to verify, just making sure it doesn't throw
         }
@@ -447,12 +452,12 @@ namespace WsRpcServer.Tests.Transport
             // without hanging (either by throwing or by returning)
             try
             {
-                await ((ValueTask)writeMethod.Invoke(
+                await ((ValueTask)writeMethod!.Invoke(
                     handler,
-                    new object[] { testMessage, cts.Token }));
+                    new object[] { testMessage, cts.Token })!);
                 // If it completed without throwing, that's fine
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 // If it threw, it should be due to cancellation, but we won't make
                 // strict assertions about the exact exception type
@@ -460,9 +465,9 @@ namespace WsRpcServer.Tests.Transport
                     l => l.Log(
                         LogLevel.Error,
                         It.IsAny<EventId>(),
-                        It.Is<It.IsAnyType>((v, t) => v.ToString().Contains("Помилка надсилання JSON-RPC повідомлення")),
+                        It.Is<It.IsAnyType>((v, t) => v!.ToString()!.Contains("Помилка надсилання JSON-RPC повідомлення")),
                         It.IsAny<Exception>(),
-                        It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                        It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                     Times.AtLeastOnce);
             }
         }
@@ -490,7 +495,7 @@ namespace WsRpcServer.Tests.Transport
                 {
                     RequestId = new RequestId(12345),
                     Method = "subscriptions.subscribe",
-                    ArgumentsList = new object[] { "account123", new[] { "Create", "Update", "Delete" } },
+                    ArgumentsList = new object[] { "account123", _subscriptionEventTypes },
                     Version = "2.0"
                 });
 
@@ -502,9 +507,9 @@ namespace WsRpcServer.Tests.Transport
                 "ReadCoreAsync",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
 
-            var result = await ((ValueTask<JsonRpcMessage>)readMethod.Invoke(
+            var result = await ((ValueTask<JsonRpcMessage>)readMethod!.Invoke(
                 handler,
-                new object[] { CancellationToken.None }));
+                new object[] { CancellationToken.None })!);
 
             // Assert
             Assert.NotNull(result);
@@ -550,9 +555,9 @@ namespace WsRpcServer.Tests.Transport
                 "ReadCoreAsync",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
 
-            var result = await ((ValueTask<JsonRpcMessage>)readMethod.Invoke(
+            var result = await ((ValueTask<JsonRpcMessage>)readMethod!.Invoke(
                 handler,
-                new object[] { CancellationToken.None }));
+                new object[] { CancellationToken.None })!);
 
             // Assert
             Assert.NotNull(result);
@@ -599,9 +604,9 @@ namespace WsRpcServer.Tests.Transport
                 "ReadCoreAsync",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
 
-            var result = await ((ValueTask<JsonRpcMessage>)readMethod.Invoke(
+            var result = await ((ValueTask<JsonRpcMessage>)readMethod!.Invoke(
                 handler,
-                new object[] { CancellationToken.None }));
+                new object[] { CancellationToken.None })!);
 
             // Assert
             Assert.NotNull(result);
@@ -656,17 +661,17 @@ namespace WsRpcServer.Tests.Transport
                 "ReadCoreAsync",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
 
-            var result = await ((ValueTask<JsonRpcMessage>)readMethod.Invoke(
+            var result = await ((ValueTask<JsonRpcMessage>)readMethod!.Invoke(
                 handler,
-                new object[] { CancellationToken.None }));
+                new object[] { CancellationToken.None })!);
 
             // Assert
             Assert.NotNull(result);
             Assert.IsType<JsonRpcError>(result);
             var error = (JsonRpcError)result;
-            Assert.Equal(JsonRpcErrorCode.InvalidRequest, error.Error.Code);
-            Assert.Equal("Invalid Request", error.Error.Message);
-            Assert.Equal("Missing required parameter", error.Error.Data);
+            Assert.Equal(JsonRpcErrorCode.InvalidRequest, error.Error!.Code);
+            Assert.Equal("Invalid Request", error.Error!.Message);
+            Assert.Equal("Missing required parameter", error.Error!.Data);
             Assert.Equal(new RequestId(12345), error.RequestId);
 
             // Verify deserialization was called
@@ -708,9 +713,9 @@ namespace WsRpcServer.Tests.Transport
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
 
             // Act
-            await ((ValueTask)writeMethod.Invoke(
+            await ((ValueTask)writeMethod!.Invoke(
                 handler,
-                new object[] { testMessage, CancellationToken.None }));
+                new object[] { testMessage, CancellationToken.None })!);
 
             // Assert
             mockTracingFormatter.As<IJsonRpcFormatterTracingCallbacks>()
@@ -755,12 +760,12 @@ namespace WsRpcServer.Tests.Transport
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
 
             // Act - send all messages concurrently
-            var tasks = messages.Select(message => 
-                Task.Run(async () => 
+            var tasks = messages.Select(message =>
+                Task.Run(async () =>
                 {
-                    await ((ValueTask)writeMethod.Invoke(
+                    await ((ValueTask)writeMethod!.Invoke(
                         handler,
-                        new object[] { message, CancellationToken.None }));
+                        new object[] { message, CancellationToken.None })!);
                 })).ToArray();
 
             // Wait for all tasks to complete

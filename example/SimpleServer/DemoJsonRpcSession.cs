@@ -49,7 +49,7 @@ public sealed class DemoJsonRpcSession : AbstractJsonRpcSession
     /// <summary>
     /// Creates a JSON formatter with optimized settings for the demo
     /// </summary>
-    private IJsonRpcMessageFormatter CreateJsonFormatter()
+    private static SystemTextJsonFormatter CreateJsonFormatter()
     {
         var formatter = new SystemTextJsonFormatter();
         formatter.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
@@ -176,7 +176,7 @@ public sealed class DemoJsonRpcSession : AbstractJsonRpcSession
             // The WebSocketMessageHandler will process the data
             if (_messageHandler != null)
             {
-                _ = _messageHandler.ProcessReceivedDataAsync(segment);
+                _ = _messageHandler.ProcessReceivedDataAsync(segment).AsTask();
             }
         }
         catch (Exception ex)
@@ -194,13 +194,13 @@ public sealed class DemoJsonRpcSession : AbstractJsonRpcSession
         base.OnWsClose(buffer, offset, size, status);
     }
 
-    protected override void Dispose(bool disposing)
+    protected override void Dispose(bool disposingManagedResources)
     {
-        if (disposing)
+        if (disposingManagedResources)
         {
             _logger.LogDebug("Disposing resources for client {ClientId}", Id);
         }
-        
-        base.Dispose(disposing);
+
+        base.Dispose(disposingManagedResources);
     }
 }

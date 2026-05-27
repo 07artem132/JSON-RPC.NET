@@ -9,9 +9,9 @@ using Xunit;
 
 namespace WsRpcServer.Tests.Core
 {
-    public class AbstractJsonRpcServerTests
+    public sealed class AbstractJsonRpcServerTests
     {
-        private class TestJsonRpcServer : AbstractJsonRpcServer
+        private sealed class TestJsonRpcServer : AbstractJsonRpcServer
         {
             public bool CreateJsonRpcSessionCalled { get; private set; }
             public TestJsonRpcServer(IPAddress address, int port, IServiceProvider serviceProvider, ILogger logger)
@@ -70,11 +70,11 @@ namespace WsRpcServer.Tests.Core
         public void Constructor_NullServiceProvider_ThrowsArgumentNullException()
         {
             // Arrange, Act & Assert
-            var exception = Assert.Throws<ArgumentNullException>(() => 
+            var exception = Assert.Throws<ArgumentNullException>(() =>
                 new TestJsonRpcServer(
                     _testIpAddress,
                     _testPort,
-                    null,
+                    null!,
                     _mockLogger.Object));
 
             Assert.Equal("serviceProvider", exception.ParamName);
@@ -84,12 +84,12 @@ namespace WsRpcServer.Tests.Core
         public void Constructor_NullLogger_ThrowsArgumentNullException()
         {
             // Arrange, Act & Assert
-            var exception = Assert.Throws<ArgumentNullException>(() => 
+            var exception = Assert.Throws<ArgumentNullException>(() =>
                 new TestJsonRpcServer(
                     _testIpAddress,
                     _testPort,
                     _mockServiceProvider.Object,
-                    null));
+                    null!));
 
             Assert.Equal("logger", exception.ParamName);
         }
@@ -106,7 +106,7 @@ namespace WsRpcServer.Tests.Core
 
             // Act
             var session = typeof(WsServer)
-                .GetMethod("CreateSession", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                .GetMethod("CreateSession", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
                 .Invoke(server, null);
 
             // Assert
@@ -130,7 +130,7 @@ namespace WsRpcServer.Tests.Core
                 It.IsAny<EventId>(),
                 It.IsAny<It.IsAnyType>(),
                 It.IsAny<Exception>(),
-                (Func<It.IsAnyType, Exception, string>)It.IsAny<object>()));
+                (Func<It.IsAnyType, Exception?, string>)It.IsAny<object>()));
 
             // Act
             var errorType = SocketError.ConnectionRefused;
@@ -140,9 +140,9 @@ namespace WsRpcServer.Tests.Core
             _mockLogger.Verify(l => l.Log(
                 LogLevel.Error,
                 It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, t) => v.ToString().Contains(errorType.ToString())),
+                It.Is<It.IsAnyType>((v, t) => v!.ToString()!.Contains(errorType.ToString())),
                 It.IsAny<Exception>(),
-                (Func<It.IsAnyType, Exception, string>)It.IsAny<object>()), 
+                (Func<It.IsAnyType, Exception?, string>)It.IsAny<object>()),
                 Times.Once);
             
             Assert.True(server.OnServerErrorCalled);

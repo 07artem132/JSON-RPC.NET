@@ -18,22 +18,22 @@
 /// викликає його методи.
 /// 
 /// Приклад використання:
-/// ```csharp
+/// <code>
 /// public class UserService : IClientAwareRpcService
 /// {
 ///     private readonly Guid _clientId;
-///     
+///
 ///     public UserService(Guid clientId)
 ///     {
 ///         _clientId = clientId;
 ///     }
-///     
-///     public Task<UserInfo> GetCurrentUser()
+///
+///     public Task&lt;UserInfo&gt; GetCurrentUser()
 ///     {
 ///         // Використання _clientId для ідентифікації користувача
 ///     }
 /// }
-/// ```
+/// </code>
 /// </remarks>
 public interface IClientAwareRpcService : IRpcService
 {

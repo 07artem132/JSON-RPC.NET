@@ -15,6 +15,18 @@
     <ImplicitUsings>enable</ImplicitUsings>
 
     <!--
+      Deferred analyzer suppressions per foundation-cluster-1 capability
+      `warnings-cleanup` spec:
+
+      CA1848 + CA1873 — "Use the LoggerMessage delegates" / "Perf rule".
+      Addressing вимагає migration усіх ~190 ILogger call sites на
+      source-generated `[LoggerMessage]` partial methods (the SignalCli.NET
+      pattern). 400+ occurrences combined; separate future capability
+      `logger-message-migration` буде окремий OpenSpec change.
+    -->
+    <NoWarn>$(NoWarn);CA1848;CA1873</NoWarn>
+
+    <!--
       Default: WARN. Per-csproj override → ERROR у `src/WsRpcServer.csproj`
       + `tests/WsRpcServer.Tests.csproj` (capability `treat-warnings-errors`).
       Example projects intentionally lax (consumer-facing demos).

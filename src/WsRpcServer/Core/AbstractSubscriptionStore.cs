@@ -239,11 +239,27 @@ public abstract class AbstractSubscriptionStore<TSubscription, TEventArgs, TEven
     /// </remarks>
     public virtual void Dispose()
     {
-        if (!_disposed)
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Внутрішня реалізація утилізації, що підтримує патерн Dispose(bool).
+    /// </summary>
+    /// <param name="disposing">true, якщо викликано з Dispose(); false з фіналізатора.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (disposing)
         {
             _lock.Dispose();
-            _disposed = true;
         }
+
+        _disposed = true;
     }
 
     /// <summary>

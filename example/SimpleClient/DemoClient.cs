@@ -21,7 +21,6 @@ public sealed class DemoClient : IAsyncDisposable
     private readonly JsonSerializerOptions _jsonOptions;
 
     private JsonRpc? _jsonRpc;
-    private Task? _receiveTask;
     private ICalculatorService? _calculatorService;
     private ISubscriptionService? _subscriptionService;
     private bool _isDisposed;
@@ -230,7 +229,7 @@ public sealed class DemoClient : IAsyncDisposable
     /// <summary>
     /// Configures event handlers for server notifications.
     /// </summary>
-    private void ConfigureEventHandlers()
+    private static void ConfigureEventHandlers()
     {
         // Add handlers for specific notifications if needed
     }

@@ -38,16 +38,16 @@
 
 ⚠ Цей крок наймасштабніший у cluster'і — ~108 fixes у 5 test files. Split на sub-commit'и по test-file якщо стане надто великим.
 
-- [ ] 3.1 Fix `tests/WsRpcServer.Tests/Transport/WebSocketMessageHandlerTests.cs` (~70 warnings):
+- [x] 3.1 Fix `tests/WsRpcServer.Tests/Transport/WebSocketMessageHandlerTests.cs` (~70 warnings):
   - Moq logger formatter type mismatches (CS8620): use `It.IsAny<Func<It.IsAnyType, Exception?, string>>()` (nullable Exception?).
   - Box-unbox nulls (CS8602/CS8605): explicit non-null assertion (`!`) where invariant established by setup.
   - Unused `ex` (CS0168) line 455: delete variable declaration.
-- [ ] 3.2 Fix `tests/WsRpcServer.Tests/Sessions/TestJsonRpcSession.cs` line 490 (CS8620): correct Moq formatter signature.
-- [ ] 3.3 Fix `tests/WsRpcServer.Tests/Core/AbstractSubscriptionStoreTests.cs:515,556` (xUnit1031): replace `Task.WaitAll(tasks)` → `await Task.WhenAll(tasks)`. Convert containing `[Fact]` method to `async Task` return.
-- [ ] 3.4 Fix remaining files (~15 warnings): `Events/TestEventProcessor.cs`, `Exceptions/RpcErrorExceptionTests.cs`, `Subscriptions/TestSubscriptionManager.cs`.
-- [ ] 3.5 `dotnet build` — 0 warnings.
-- [ ] 3.6 `dotnet test --no-build` — 83 passing (no test logic touched, only annotations/awaits).
-- [ ] 3.7 Commit: `test(hygiene): fix all 108 build warnings (nullability + xUnit1031 + unused-var)`.
+- [x] 3.2 Fix `tests/WsRpcServer.Tests/Sessions/TestJsonRpcSession.cs` line 490 (CS8620): correct Moq formatter signature.
+- [x] 3.3 Fix `tests/WsRpcServer.Tests/Core/AbstractSubscriptionStoreTests.cs:515,556` (xUnit1031): replace `Task.WaitAll(tasks)` → `await Task.WhenAll(tasks)`. Convert containing `[Fact]` method to `async Task` return.
+- [x] 3.4 Fix remaining files (~15 warnings): `Events/TestEventProcessor.cs`, `Exceptions/RpcErrorExceptionTests.cs`, `Subscriptions/TestSubscriptionManager.cs`.
+- [x] 3.5 `dotnet build` — 0 warnings.
+- [x] 3.6 `dotnet test --no-build` — 83 passing (no test logic touched, only annotations/awaits).
+- [x] 3.7 Commit: `test(hygiene): fix all 108 build warnings (nullability + xUnit1031 + unused-var)`.
 
 ## Capability 4 — `treat-warnings-errors`
 
