@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -10,18 +11,22 @@ namespace WsRpcServer.Tests.Core
 {
     public class AbstractSubscriptionStoreTests
     {
+        private static readonly string[] _validAccountValues = ["test-account", "updated-account"];
+
+
         // Define simple test types for our generic implementation
         public class TestSubscription
         {
             public int Id { get; set; }
-            public string Account { get; set; }
+            public string Account { get; set; } = string.Empty;
             public HashSet<Guid> ClientIds { get; set; } = new HashSet<Guid>();
             public TestEventType EventType { get; set; }
         }
 
+        [SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "Test type intentionally mirrors EventArgs naming; not a CLR event-args contract.")]
         public class TestEventArgs
         {
-            public string Account { get; set; }
+            public string Account { get; set; } = string.Empty;
             public TestEventType EventType { get; set; }
         }
 
@@ -33,7 +38,7 @@ namespace WsRpcServer.Tests.Core
         }
 
         // Test implementation of AbstractSubscriptionStore
-        private class TestSubscriptionStore : AbstractSubscriptionStore<TestSubscription, TestEventArgs, TestEventType>
+        private sealed class TestSubscriptionStore : AbstractSubscriptionStore<TestSubscription, TestEventArgs, TestEventType>
         {
             // Simple in-memory storage for testing
             private readonly Dictionary<int, TestSubscription> _subscriptions = new();
@@ -76,16 +81,16 @@ namespace WsRpcServer.Tests.Core
                 }
             }
 
-            protected override TestSubscription GetSubscriptionCore(int subscriptionId)
+            protected override TestSubscription? GetSubscriptionCore(int subscriptionId)
             {
                 if (DelayMilliseconds > 0)
                     Thread.Sleep(DelayMilliseconds);
-                
+
                 GetSubscriptionCoreCalled = true;
                 return _subscriptions.TryGetValue(subscriptionId, out var subscription) ? subscription : null;
             }
 
-            protected override (TestSubscription Subscription, HashSet<Guid> RemainingClients, int ProviderSubscriptionId) 
+            protected override (TestSubscription? Subscription, HashSet<Guid>? RemainingClients, int ProviderSubscriptionId)
                 RemoveSubscriptionCore(Guid clientId, int subscriptionId)
             {
                 if (DelayMilliseconds > 0)
@@ -109,8 +114,8 @@ namespace WsRpcServer.Tests.Core
                     }
                 }
                 
-                int providerSubscriptionId = _providerSubscriptionIds.ContainsKey(subscriptionId) 
-                    ? _providerSubscriptionIds[subscriptionId] 
+                int providerSubscriptionId = _providerSubscriptionIds.TryGetValue(subscriptionId, out var providerSubId)
+                    ? providerSubId
                     : 0;
                 
                 if (subscription.ClientIds.Count == 0)
@@ -190,7 +195,7 @@ namespace WsRpcServer.Tests.Core
                 return result.ToList();
             }
 
-            protected override (string Account, int? ProviderSubscriptionId) GetSubscriptionInfoCore(int subscriptionId)
+            protected override (string? Account, int? ProviderSubscriptionId) GetSubscriptionInfoCore(int subscriptionId)
             {
                 if (DelayMilliseconds > 0)
                     Thread.Sleep(DelayMilliseconds);
@@ -485,7 +490,7 @@ namespace WsRpcServer.Tests.Core
         }
 
         [Fact]
-        public void ThreadSafety_ConcurrentReads_SynchronizesAccess()
+        public async Task ThreadSafety_ConcurrentReads_SynchronizesAccess()
         {
             // Arrange
             var store = new TestSubscriptionStore { DelayMilliseconds = 50 };
@@ -512,11 +517,11 @@ namespace WsRpcServer.Tests.Core
             }
             
             // All tasks should complete without exceptions
-            Task.WaitAll(tasks.ToArray());
+            await Task.WhenAll(tasks);
         }
 
         [Fact]
-        public void ThreadSafety_ConcurrentReadWrite_SynchronizesAccess()
+        public async Task ThreadSafety_ConcurrentReadWrite_SynchronizesAccess()
         {
             // Arrange
             var store = new TestSubscriptionStore { DelayMilliseconds = 50 };
@@ -549,11 +554,11 @@ namespace WsRpcServer.Tests.Core
                 var result = store.GetSubscription(1);
                 // The result should be either the original or updated value, not corrupted
                 Assert.NotNull(result);
-                Assert.Contains(result.Account, new[] { "test-account", "updated-account" });
+                Assert.Contains(result.Account, _validAccountValues);
             })).ToList();
             
             // All tasks should complete without exceptions
-            Task.WaitAll(readTasks.Concat(new[] { writeTask }).ToArray());
+            await Task.WhenAll(readTasks.Concat([writeTask]));
         }
     }
 }

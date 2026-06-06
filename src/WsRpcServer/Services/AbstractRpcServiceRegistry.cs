@@ -29,13 +29,13 @@ public abstract class AbstractRpcServiceRegistry(
     /// <summary>
     /// Постачальник сервісів для отримання екземплярів RPC-сервісів.
     /// </summary>
-    protected readonly IServiceProvider ServiceProvider =
+    protected IServiceProvider ServiceProvider { get; } =
         serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
 
     /// <summary>
     /// Логер для реєстрації подій реєстру сервісів.
     /// </summary>
-    protected readonly ILogger Logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    protected ILogger Logger { get; } = logger ?? throw new ArgumentNullException(nameof(logger));
 
     /// <summary>
     /// Стандартні опції для цільових об'єктів JSON-RPC.
@@ -46,7 +46,7 @@ public abstract class AbstractRpcServiceRegistry(
     /// JavaScript-конвенціями іменування, де методи починаються з малої літери.
     /// Наприклад, метод C# "GetUser" буде доступний у клієнті як "getUser".
     /// </remarks>
-    protected readonly JsonRpcTargetOptions StandardOptions = new()
+    protected JsonRpcTargetOptions StandardOptions { get; } = new()
     {
         MethodNameTransform = CommonMethodNameTransforms.CamelCase
     };
@@ -172,7 +172,7 @@ public abstract class AbstractRpcServiceRegistry(
     {
         var name = assembly.GetName().Name;
         return name == typeof(IRpcService).Assembly.GetName().Name ||
-               GetAdditionalAssemblyPrefixes().Any(prefix => name?.StartsWith(prefix) == true);
+               GetAdditionalAssemblyPrefixes().Any(prefix => name?.StartsWith(prefix, StringComparison.Ordinal) == true);
     }
 
     /// <summary>
@@ -184,12 +184,12 @@ public abstract class AbstractRpcServiceRegistry(
     /// Визначає, які збірки, крім основної, будуть скановані на наявність RPC-сервісів.
     /// 
     /// Приклад реалізації:
-    /// ```csharp
-    /// protected override IEnumerable<string> GetAdditionalAssemblyPrefixes()
+    /// <code>
+    /// protected override IEnumerable&lt;string&gt; GetAdditionalAssemblyPrefixes()
     /// {
     ///     return new[] { "MyCompany.Services", "MyCompany.Api" };
     /// }
-    /// ```
+    /// </code>
     /// </remarks>
     protected abstract IEnumerable<string> GetAdditionalAssemblyPrefixes();
 

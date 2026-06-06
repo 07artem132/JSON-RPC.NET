@@ -25,7 +25,7 @@ public abstract class AbstractSubscriptionManager(ILogger logger, int maxSubscri
     /// <summary>
     /// Логер для реєстрації подій менеджера підписок.
     /// </summary>
-    protected readonly ILogger Logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    protected ILogger Logger { get; } = logger ?? throw new ArgumentNullException(nameof(logger));
 
     /// <summary>
     /// Семафор для синхронізації операцій з підписками.
@@ -34,11 +34,11 @@ public abstract class AbstractSubscriptionManager(ILogger logger, int maxSubscri
     /// SemaphoreSlim використовується для синхронізації доступу до спільних ресурсів
     /// при операціях з підписками. Це дозволяє безпечно виконувати операції з різних потоків,
     /// уникаючи проблем з паралельним доступом.
-    /// 
+    ///
     /// Ініціалізується з початковою кількістю 1 та максимальною кількістю 1,
     /// що означає, що лише один потік може одночасно виконувати операції з підписками.
     /// </remarks>
-    protected readonly SemaphoreSlim OperationLock = new(1, 1);
+    protected SemaphoreSlim OperationLock { get; } = new(1, 1);
 
     /// <summary>
     /// Словник для відстеження кількості підписок кожного клієнта.
@@ -47,11 +47,11 @@ public abstract class AbstractSubscriptionManager(ILogger logger, int maxSubscri
     /// ConcurrentDictionary використовується для потокобезпечного зберігання кількості
     /// підписок кожного клієнта. Це дозволяє швидко перевіряти обмеження на кількість
     /// підписок без необхідності додаткової синхронізації.
-    /// 
+    ///
     /// Ключ: Guid - ідентифікатор клієнта
     /// Значення: int - кількість підписок клієнта
     /// </remarks>
-    protected readonly ConcurrentDictionary<Guid, int> ClientSubscriptionCounts = new();
+    protected ConcurrentDictionary<Guid, int> ClientSubscriptionCounts { get; } = new();
 
     /// <summary>
     /// Максимальна кількість підписок на одного клієнта.
@@ -60,12 +60,12 @@ public abstract class AbstractSubscriptionManager(ILogger logger, int maxSubscri
     /// Це обмеження запобігає зловживанню ресурсами сервера окремими клієнтами.
     /// За замовчуванням встановлено значення 10, яке можна змінити через конструктор.
     /// </remarks>
-    protected readonly int MaxSubscriptionsPerClient = maxSubscriptionsPerClient;
+    protected int MaxSubscriptionsPerClient { get; } = maxSubscriptionsPerClient;
 
     /// <summary>
     /// Прапорець, що вказує, чи був менеджер утилізований.
     /// </summary>
-    protected bool IsDisposed;
+    protected bool IsDisposed { get; set; }
 
     /// <summary>
     /// Створює підписку на події для клієнта.
@@ -158,10 +158,26 @@ public abstract class AbstractSubscriptionManager(ILogger logger, int maxSubscri
     /// </remarks>
     public virtual void Dispose()
     {
-        if (!IsDisposed)
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Внутрішня реалізація утилізації, що підтримує патерн Dispose(bool).
+    /// </summary>
+    /// <param name="disposing">true, якщо викликано з Dispose(); false з фіналізатора.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        if (disposing)
         {
             OperationLock.Dispose();
-            IsDisposed = true;
         }
+
+        IsDisposed = true;
     }
 }

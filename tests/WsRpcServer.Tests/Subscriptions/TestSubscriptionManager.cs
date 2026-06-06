@@ -140,8 +140,15 @@ namespace WsRpcServer.Tests.Subscriptions
         }
     }
 
-    public class AbstractSubscriptionManagerTests
+    public class AbstractSubscriptionManagerTests : IDisposable
     {
+        private static readonly string[] _eventsCreateUpdate = ["Create", "Update"];
+        private static readonly string[] _eventsCreateOnly = ["Create"];
+        private static readonly string[] _eventsUpdateOnly = ["Update"];
+        private static readonly string[] _eventsDeleteOnly = ["Delete"];
+        private static readonly string[] _eventsGenericEvent = ["Event"];
+        private static readonly string[] _eventsCreateUpdateDelete = ["Create", "Update", "Delete"];
+
         private readonly Mock<ILogger> _loggerMock;
         private readonly TestSubscriptionManager _manager;
         private readonly Guid _clientId = Guid.NewGuid();
@@ -152,6 +159,12 @@ namespace WsRpcServer.Tests.Subscriptions
         {
             _loggerMock = new Mock<ILogger>();
             _manager = new TestSubscriptionManager(_loggerMock.Object, _maxSubscriptions);
+        }
+
+        public void Dispose()
+        {
+            _manager.Dispose();
+            GC.SuppressFinalize(this);
         }
 
         [Fact]
@@ -173,7 +186,7 @@ namespace WsRpcServer.Tests.Subscriptions
         {
             // Arrange
             // Подготавливаем тестовые параметры подписки
-            var eventTypes = new[] { "Create", "Update" };
+            var eventTypes = _eventsCreateUpdate;
 
             // Act
             // Создаем подписку и получаем ее идентификатор
@@ -190,8 +203,8 @@ namespace WsRpcServer.Tests.Subscriptions
         {
             // Arrange
             // Подготавливаем параметры для нескольких подписок
-            var eventTypes1 = new[] { "Create" };
-            var eventTypes2 = new[] { "Update" };
+            var eventTypes1 = _eventsCreateOnly;
+            var eventTypes2 = _eventsUpdateOnly;
 
             // Act
             // Создаем две подписки для одного клиента
@@ -209,7 +222,7 @@ namespace WsRpcServer.Tests.Subscriptions
         {
             // Arrange
             // Подготавливаем параметры для максимального количества подписок + 1
-            var eventTypes = new[] { "Event" };
+            var eventTypes = _eventsGenericEvent;
 
             // Act & Assert
             // Создаем подписки до достижения максимума
@@ -228,7 +241,7 @@ namespace WsRpcServer.Tests.Subscriptions
         {
             // Arrange
             // Создаем подписку, которую затем отменим
-            var eventTypes = new[] { "Create" };
+            var eventTypes = _eventsCreateOnly;
             var subscriptionId = await _manager.Subscribe(_clientId, _testAccount, eventTypes);
 
             // Act
@@ -262,7 +275,7 @@ namespace WsRpcServer.Tests.Subscriptions
         {
             // Arrange
             // Используем существующую подписку, но для другого клиента
-            var eventTypes = new[] { "Create" };
+            var eventTypes = _eventsCreateOnly;
             var subscriptionId = await _manager.Subscribe(_clientId, _testAccount, eventTypes);
             var differentClientId = Guid.NewGuid();
 
@@ -282,8 +295,8 @@ namespace WsRpcServer.Tests.Subscriptions
         {
             // Arrange
             // Создаем подписку, которую затем обновим
-            var originalEventTypes = new[] { "Create" };
-            var newEventTypes = new[] { "Create", "Update", "Delete" };
+            var originalEventTypes = _eventsCreateOnly;
+            var newEventTypes = _eventsCreateUpdateDelete;
             var subscriptionId = await _manager.Subscribe(_clientId, _testAccount, originalEventTypes);
 
             // Act
@@ -301,7 +314,7 @@ namespace WsRpcServer.Tests.Subscriptions
             // Arrange
             // Используем несуществующий идентификатор подписки
             int nonExistingSubscriptionId = 9999;
-            var newEventTypes = new[] { "Update" };
+            var newEventTypes = _eventsUpdateOnly;
 
             // Act
             // Пытаемся обновить несуществующую подписку
@@ -320,8 +333,8 @@ namespace WsRpcServer.Tests.Subscriptions
             var clientId1 = Guid.NewGuid();
             var clientId2 = Guid.NewGuid();
             
-            await _manager.Subscribe(clientId1, _testAccount, new[] { "Create", "Update" });
-            await _manager.Subscribe(clientId2, _testAccount, new[] { "Delete" });
+            await _manager.Subscribe(clientId1, _testAccount, _eventsCreateUpdate);
+            await _manager.Subscribe(clientId2, _testAccount, _eventsDeleteOnly);
 
             // Act
             // Получаем клиентов для события типа "Update"
@@ -338,7 +351,7 @@ namespace WsRpcServer.Tests.Subscriptions
         {
             // Arrange
             // Создаем подписки с типами событий, не соответствующими запрашиваемому
-            await _manager.Subscribe(_clientId, _testAccount, new[] { "Create", "Update" });
+            await _manager.Subscribe(_clientId, _testAccount, _eventsCreateUpdate);
 
             // Act
             // Получаем клиентов для события типа, на который никто не подписан
@@ -358,9 +371,9 @@ namespace WsRpcServer.Tests.Subscriptions
             var clientId2 = Guid.NewGuid();
             var clientId3 = Guid.NewGuid();
             
-            await _manager.Subscribe(clientId1, _testAccount, new[] { "Create" });
-            await _manager.Subscribe(clientId2, _testAccount, new[] { "Create", "Update" });
-            await _manager.Subscribe(clientId3, _testAccount, new[] { "Delete" });
+            await _manager.Subscribe(clientId1, _testAccount, _eventsCreateOnly);
+            await _manager.Subscribe(clientId2, _testAccount, _eventsCreateUpdate);
+            await _manager.Subscribe(clientId3, _testAccount, _eventsDeleteOnly);
 
             // Act
             // Получаем клиентов для события типа "Create"

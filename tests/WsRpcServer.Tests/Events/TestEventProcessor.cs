@@ -30,7 +30,7 @@ namespace WsRpcServer.Tests.Events
         public bool IsDisposedAccessor => IsDisposed;
     }
 
-    public class AbstractEventProcessorTests
+    public class AbstractEventProcessorTests : IDisposable
     {
         private readonly Mock<ILogger> _loggerMock;
         private readonly TestEventProcessor _eventProcessor;
@@ -40,6 +40,12 @@ namespace WsRpcServer.Tests.Events
         {
             _loggerMock = new Mock<ILogger>();
             _eventProcessor = new TestEventProcessor(_loggerMock.Object);
+        }
+
+        public void Dispose()
+        {
+            _eventProcessor.Dispose();
+            GC.SuppressFinalize(this);
         }
 
         [Fact]
@@ -58,9 +64,9 @@ namespace WsRpcServer.Tests.Events
                 x => x.Log(
                     LogLevel.Information,
                     It.IsAny<EventId>(),
-                    It.Is<It.IsAnyType>((o, t) => o.ToString().Contains("Запуск обробника подій")),
-                    null,
-                    It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                    It.Is<It.IsAnyType>((o, t) => o!.ToString()!.Contains("Запуск обробника подій")),
+                    (Exception?)null,
+                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 Times.Once);
         }
 
@@ -82,9 +88,9 @@ namespace WsRpcServer.Tests.Events
                 x => x.Log(
                     LogLevel.Information,
                     It.IsAny<EventId>(),
-                    It.Is<It.IsAnyType>((o, t) => o.ToString().Contains("Зупинка обробника подій")),
-                    null,
-                    It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                    It.Is<It.IsAnyType>((o, t) => o!.ToString()!.Contains("Зупинка обробника подій")),
+                    (Exception?)null,
+                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 Times.Once);
         }
 
@@ -109,9 +115,9 @@ namespace WsRpcServer.Tests.Events
                 x => x.Log(
                     LogLevel.Information,
                     It.IsAny<EventId>(),
-                    It.Is<It.IsAnyType>((o, t) => o.ToString().Contains("зареєстрований для отримання сповіщень")),
-                    null,
-                    It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                    It.Is<It.IsAnyType>((o, t) => o!.ToString()!.Contains("зареєстрований для отримання сповіщень")),
+                    (Exception?)null,
+                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 Times.Once);
         }
 
@@ -123,8 +129,8 @@ namespace WsRpcServer.Tests.Events
 
             // Act & Assert
             // Проверяем, что при передаче null-обработчика выбрасывается исключение ArgumentNullException
-            var exception = Assert.Throws<ArgumentNullException>(() => 
-                _eventProcessor.RegisterClient(_clientId, null));
+            var exception = Assert.Throws<ArgumentNullException>(() =>
+                _eventProcessor.RegisterClient(_clientId, null!));
             // Проверяем, что имя параметра в исключении соответствует ожидаемому
             Assert.Equal("notificationHandler", exception.ParamName);
         }
@@ -148,9 +154,9 @@ namespace WsRpcServer.Tests.Events
                 x => x.Log(
                     LogLevel.Information,
                     It.IsAny<EventId>(),
-                    It.Is<It.IsAnyType>((o, t) => o.ToString().Contains("відписаний від сповіщень")),
-                    null,
-                    It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                    It.Is<It.IsAnyType>((o, t) => o!.ToString()!.Contains("відписаний від сповіщень")),
+                    (Exception?)null,
+                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 Times.Once);
         }
 
@@ -171,9 +177,9 @@ namespace WsRpcServer.Tests.Events
                 x => x.Log(
                     LogLevel.Information,
                     It.IsAny<EventId>(),
-                    It.Is<It.IsAnyType>((o, t) => o.ToString().Contains("відписаний від сповіщень")),
-                    null,
-                    It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                    It.Is<It.IsAnyType>((o, t) => o!.ToString()!.Contains("відписаний від сповіщень")),
+                    (Exception?)null,
+                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 Times.Never);
         }
 
@@ -273,9 +279,9 @@ namespace WsRpcServer.Tests.Events
                 x => x.Log(
                     LogLevel.Error,
                     It.IsAny<EventId>(),
-                    It.Is<It.IsAnyType>((o, t) => o.ToString().Contains("Помилка відправки сповіщення")),
+                    It.Is<It.IsAnyType>((o, t) => o!.ToString()!.Contains("Помилка відправки сповіщення")),
                     It.IsAny<Exception>(),
-                    It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 Times.AtLeastOnce);
         }
 

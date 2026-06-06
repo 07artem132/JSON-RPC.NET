@@ -125,7 +125,7 @@
             }
         }
 
-        public class AbstractJsonRpcSessionTests
+        public class AbstractJsonRpcSessionTests : IDisposable
         {
             private readonly TestWsServer _server;
             private readonly Mock<ILogger> _loggerMock;
@@ -142,6 +142,13 @@
                     NotificationTimeout = TimeSpan.FromMilliseconds(100)
                 };
                 _session = new TestJsonRpcSession(_server, _loggerMock.Object, _config);
+            }
+
+            public void Dispose()
+            {
+                _session.Dispose();
+                _server.Dispose();
+                GC.SuppressFinalize(this);
             }
 
             [Fact]
@@ -184,9 +191,9 @@
                     x => x.Log(
                         LogLevel.Debug,
                         It.IsAny<EventId>(),
-                        It.Is<It.IsAnyType>((o, t) => o.ToString().Contains("Додано сповіщення")),
-                        null,
-                        It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                        It.Is<It.IsAnyType>((o, t) => o!.ToString()!.Contains("Додано сповіщення")),
+                        (Exception?)null,
+                        It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                     Times.Once);
             }
 
@@ -210,9 +217,9 @@
                     x => x.Log(
                         LogLevel.Debug,
                         It.IsAny<EventId>(),
-                        It.Is<It.IsAnyType>((o, t) => o.ToString().Contains("Пропуск сповіщення")),
-                        null,
-                        It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                        It.Is<It.IsAnyType>((o, t) => o!.ToString()!.Contains("Пропуск сповіщення")),
+                        (Exception?)null,
+                        It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                     Times.Once);
             }
 
@@ -236,9 +243,9 @@
                     x => x.Log(
                         LogLevel.Debug,
                         It.IsAny<EventId>(),
-                        It.Is<It.IsAnyType>((o, t) => o.ToString().Contains("Пропуск сповіщення")),
-                        null,
-                        It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                        It.Is<It.IsAnyType>((o, t) => o!.ToString()!.Contains("Пропуск сповіщення")),
+                        (Exception?)null,
+                        It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                     Times.Once);
             }
 
@@ -260,9 +267,9 @@
                     x => x.Log(
                         LogLevel.Information,
                         It.IsAny<EventId>(),
-                        It.Is<It.IsAnyType>((o, t) => o.ToString().Contains("Закриття WebSocket з'єднання")),
-                        null,
-                        It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                        It.Is<It.IsAnyType>((o, t) => o!.ToString()!.Contains("Закриття WebSocket з'єднання")),
+                        (Exception?)null,
+                        It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                     Times.Once);
             }
 
@@ -283,9 +290,9 @@
                     x => x.Log(
                         LogLevel.Debug,
                         It.IsAny<EventId>(),
-                        It.Is<It.IsAnyType>((o, t) => o.ToString().Contains("Надсилання бінарних даних")),
-                        null,
-                        It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                        It.Is<It.IsAnyType>((o, t) => o!.ToString()!.Contains("Надсилання бінарних даних")),
+                        (Exception?)null,
+                        It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                     Times.Once);
                 
                 // Примечание: нельзя напрямую проверить вызов SendBinaryAsync из-за ограничений мокинга
@@ -309,9 +316,9 @@
                     x => x.Log(
                         LogLevel.Warning,
                         It.IsAny<EventId>(),
-                        It.Is<It.IsAnyType>((o, t) => o.ToString().Contains("Спроба надіслати бінарні дані після утилізації")),
-                        null,
-                        It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                        It.Is<It.IsAnyType>((o, t) => o!.ToString()!.Contains("Спроба надіслати бінарні дані після утилізації")),
+                        (Exception?)null,
+                        It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                     Times.Once);
             }
 
@@ -332,9 +339,9 @@
                     x => x.Log(
                         LogLevel.Debug,
                         It.IsAny<EventId>(),
-                        It.Is<It.IsAnyType>((o, t) => o.ToString().Contains("Отримано WebSocket ping")),
-                        null,
-                        It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                        It.Is<It.IsAnyType>((o, t) => o!.ToString()!.Contains("Отримано WebSocket ping")),
+                        (Exception?)null,
+                        It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                     Times.Once);
             }
 
@@ -390,9 +397,9 @@
                     x => x.Log(
                         LogLevel.Debug,
                         It.IsAny<EventId>(),
-                        It.Is<It.IsAnyType>((o, t) => o.ToString().Contains("Надіслано сповіщення")),
-                        null,
-                        It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                        It.Is<It.IsAnyType>((o, t) => o!.ToString()!.Contains("Надіслано сповіщення")),
+                        (Exception?)null,
+                        It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                     Times.Once);
             }
 
@@ -410,9 +417,9 @@
                 _loggerMock.Setup(x => x.Log(
                         LogLevel.Error,
                         It.IsAny<EventId>(),
-                        It.Is<It.IsAnyType>((o, t) => o.ToString().Contains("Помилка надсилання сповіщення")),
+                        It.Is<It.IsAnyType>((o, t) => o!.ToString()!.Contains("Помилка надсилання сповіщення")),
                         It.IsAny<Exception>(),
-                        It.IsAny<Func<It.IsAnyType, Exception, string>>()))
+                        It.IsAny<Func<It.IsAnyType, Exception?, string>>()))
                     .Callback(() => errorLogged.TrySetResult(true));
     
                 // Запускаем задачу обработки уведомлений
@@ -435,9 +442,9 @@
                     x => x.Log(
                         LogLevel.Error,
                         It.IsAny<EventId>(),
-                        It.Is<It.IsAnyType>((o, t) => o.ToString().Contains("Помилка надсилання сповіщення")),
+                        It.Is<It.IsAnyType>((o, t) => o!.ToString()!.Contains("Помилка надсилання сповіщення")),
                         It.IsAny<Exception>(),
-                        It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                        It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                     Times.AtLeastOnce);
             }
 
@@ -454,9 +461,9 @@
                _loggerMock.Setup(x => x.Log(
                        LogLevel.Debug,
                        It.IsAny<EventId>(),
-                       It.Is<It.IsAnyType>((o, t) => o.ToString().Contains("Надіслано сповіщення")),
-                       null,
-                       It.IsAny<Func<It.IsAnyType, Exception, string>>()))
+                       It.Is<It.IsAnyType>((o, t) => o!.ToString()!.Contains("Надіслано сповіщення")),
+                       (Exception?)null,
+                       It.IsAny<Func<It.IsAnyType, Exception?, string>>()))
                    .Callback(() => notificationReceived.TrySetResult(true));
     
                // Запускаем задачу обработки уведомлений
@@ -485,9 +492,9 @@
                    x => x.Log(
                        LogLevel.Debug,
                        It.IsAny<EventId>(),
-                       It.Is<It.IsAnyType>((o, t) => o.ToString().Contains("Обробку сповіщень скасовано")),
-                       null,
-                       It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+                       It.Is<It.IsAnyType>((o, t) => o!.ToString()!.Contains("Обробку сповіщень скасовано")),
+                       (Exception?)null,
+                       It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                    Times.AtLeastOnce);
            }
         }

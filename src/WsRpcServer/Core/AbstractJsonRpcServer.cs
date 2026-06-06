@@ -3,6 +3,7 @@
 using Microsoft.Extensions.Logging;
 using NetCoreServer;
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Sockets;
 
@@ -27,7 +28,7 @@ public abstract class AbstractJsonRpcServer(
     /// Постачальник сервісів для створення екземплярів залежностей.
     /// Ключовий компонент для інтеграції з DI контейнером та забезпечення доступу до зареєстрованих сервісів.
     /// </summary>
-    protected readonly IServiceProvider ServiceProvider =
+    protected IServiceProvider ServiceProvider { get; } =
         serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
 
     /// <summary>
@@ -83,6 +84,7 @@ public abstract class AbstractJsonRpcServer(
     /// Використовується для розширення обробки помилок без перевизначення базового методу OnError.
     /// Порожня реалізація за замовчуванням дозволяє похідним класам реагувати лише при необхідності.
     /// </remarks>
+    [SuppressMessage("Naming", "CA1716:Identifiers should not match keywords", Justification = "C#-only project; renaming would break virtual-method overrides in consumer code.")]
     protected virtual void OnServerError(SocketError error)
     {
     }

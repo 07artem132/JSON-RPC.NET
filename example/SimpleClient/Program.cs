@@ -7,14 +7,14 @@ using SimpleClient;
 
 namespace SimpleClientTerminalGui
 {
-    public class TerminalGuiUI
+    public sealed class TerminalGuiUI
     {
         // UI элементы для дашборда
-        public Label StatusLabel { get; private set; }
-        public Label TimeLabel { get; private set; }
-        public Label ActivityLabel { get; private set; }
-        public FrameView DashboardFrame { get; private set; }
-        public FrameView MenuFrame { get; private set; }
+        public Label StatusLabel { get; private set; } = null!;
+        public Label TimeLabel { get; private set; } = null!;
+        public Label ActivityLabel { get; private set; } = null!;
+        public FrameView DashboardFrame { get; private set; } = null!;
+        public FrameView MenuFrame { get; private set; } = null!;
 
         public TerminalGuiUI()
         {
@@ -78,13 +78,13 @@ namespace SimpleClientTerminalGui
         }
     }
 
-    class Program
+    sealed class Program
     {
         // Объект клиента, предполагается, что DemoClient реализует асинхронное соединение и события
-        static DemoClient client;
+        static DemoClient client = null!;
         static int subscriptionId;
-        static TerminalGuiUI guiUI;
-        static ILogger logger;
+        static TerminalGuiUI guiUI = null!;
+        static ILogger logger = null!;
 
         static void Main(string[] args)
         {
@@ -117,7 +117,7 @@ namespace SimpleClientTerminalGui
             // Для асинхронных вызовов используем async-лямбду.
             menuListView.OpenSelectedItem += async (args) =>
             {
-                string selected = args.Value.ToString();
+                string selected = args.Value.ToString()!;
                 switch (selected)
                 {
                     case "Сложить два числа":
@@ -222,7 +222,7 @@ namespace SimpleClientTerminalGui
             var okButton = new Button("OK");
             okButton.Clicked += () =>
             {
-                int.TryParse(textField.Text.ToString(), out result);
+                _ = int.TryParse(textField.Text.ToString(), out result);
                 Application.RequestStop();
             };
             dialog.AddButton(okButton);

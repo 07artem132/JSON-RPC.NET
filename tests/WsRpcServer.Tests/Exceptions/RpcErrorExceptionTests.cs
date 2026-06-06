@@ -5,7 +5,7 @@ using Xunit;
 
 namespace WsRpcServer.Tests.Exceptions
 {
-    public class RpcErrorExceptionTests
+    public sealed class RpcErrorExceptionTests
     {
         [Fact]
         public void Constructor_WithErrorCodeMessageAndInnerException_SetsPropertiesCorrectly()
@@ -144,7 +144,7 @@ namespace WsRpcServer.Tests.Exceptions
         }
 
         // Вспомогательный класс для тестирования сложных данных об ошибке
-        private class ComplexErrorData
+        private sealed class ComplexErrorData
         {
             public int ErrorCode { get; set; }
             public string ErrorMessage { get; set; } = string.Empty;

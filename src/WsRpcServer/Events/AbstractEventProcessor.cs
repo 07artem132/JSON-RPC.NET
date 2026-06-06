@@ -24,7 +24,7 @@ public abstract class AbstractEventProcessor(ILogger logger) : IEventProcessor, 
     /// <summary>
     /// Логер для реєстрації подій обробника.
     /// </summary>
-    protected readonly ILogger Logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    protected ILogger Logger { get; } = logger ?? throw new ArgumentNullException(nameof(logger));
 
     /// <summary>
     /// Словник клієнтських обробників сповіщень, індексованих за ідентифікатором клієнта.
@@ -34,7 +34,7 @@ public abstract class AbstractEventProcessor(ILogger logger) : IEventProcessor, 
     /// Кожен клієнт представлений своїм унікальним ідентифікатором (Guid) та функцією обробника,
     /// яка викликається для відправки сповіщень цьому клієнту.
     /// </remarks>
-    protected readonly ConcurrentDictionary<Guid, Func<string, object[], Task>> ClientHandlers = new();
+    protected ConcurrentDictionary<Guid, Func<string, object[], Task>> ClientHandlers { get; } = new();
 
     /// <summary>
     /// Джерело токенів скасування для контролю життєвого циклу обробника подій.
@@ -43,7 +43,7 @@ public abstract class AbstractEventProcessor(ILogger logger) : IEventProcessor, 
     /// Використовується для координації зупинки фонових завдань при завершенні роботи обробника.
     /// Спільний токен скасування забезпечує узгоджену зупинку всіх асинхронних операцій.
     /// </remarks>
-    protected readonly CancellationTokenSource Cts = new();
+    protected CancellationTokenSource Cts { get; } = new();
 
     /// <summary>
     /// Список зовнішніх підписок, які необхідно звільнити при утилізації обробника.
@@ -52,12 +52,12 @@ public abstract class AbstractEventProcessor(ILogger logger) : IEventProcessor, 
     /// Корисно для відстеження зовнішніх ресурсів (наприклад, підписок на події зовнішніх систем),
     /// які необхідно коректно звільнити при завершенні роботи обробника.
     /// </remarks>
-    protected readonly List<IDisposable> Subscriptions = new();
+    protected List<IDisposable> Subscriptions { get; } = new();
 
     /// <summary>
     /// Прапорець, що вказує, чи був обробник утилізований.
     /// </summary>
-    protected bool IsDisposed;
+    protected bool IsDisposed { get; set; }
 
     /// <summary>
     /// Запускає процес обробки подій.
@@ -136,7 +136,22 @@ public abstract class AbstractEventProcessor(ILogger logger) : IEventProcessor, 
     /// </remarks>
     public virtual void Dispose()
     {
-        if (!IsDisposed)
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Внутрішня реалізація утилізації, що підтримує патерн Dispose(bool).
+    /// </summary>
+    /// <param name="disposing">true, якщо викликано з Dispose(); false з фіналізатора.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        if (disposing)
         {
             Cts.Dispose();
 
@@ -146,8 +161,9 @@ public abstract class AbstractEventProcessor(ILogger logger) : IEventProcessor, 
             }
 
             Subscriptions.Clear();
-            IsDisposed = true;
         }
+
+        IsDisposed = true;
     }
 
     /// <summary>
