@@ -20,7 +20,7 @@ It is a **framework of abstract base classes** — consumers subclass `AbstractJ
 `[IRpcService]` discovery. The primary downstream consumer is **SignalCliNet.WsRpcServer**.
 
 - Target framework: **net10.0**. Package version lives in `Directory.Build.props`
-  (`<WsRpcServerPackageVersion>`, currently **2.4.0**) — never hardcode `<Version>` in a csproj.
+  (`<WsRpcServerPackageVersion>`, currently **2.5.0**) — never hardcode `<Version>` in a csproj.
 - Five layers: Transport (WebSocket) → Protocol (JSON-RPC 2.0) → Session → Service → Subscription.
 
 ## Build & test
@@ -92,12 +92,19 @@ Path-scoped agent instructions live in `.claude/rules/` (load conditionally when
    `registry-sourcegen-discovery` (2.3.0); `aot-readiness` (2.4.0) then annotated `AddJsonRpcCore<…>`'s
    generics (`[DynamicallyAccessedMembers]`) + suppressed the reflection-fallback boundary, so the
    **discovery path is provably Native-AOT-clean** (0 IL warnings under `-p:IsAotCompatible=true`; a real
-   `PublishAot` native binary in `aot-smoke/` runs catalog-based discovery with no reflection). **Still do
-   not flip `<IsAotCompatible>true</IsAotCompatible>`**: RPC *dispatch* still uses StreamJsonRpc's
-   reflection-based `JsonRpc.AddLocalRpcTarget`. The spike (see `registry-sourcegen-discovery` notes)
-   found the AOT-clean alternative — source-generated `JsonRpc.AddLocalRpcMethod(name, delegate)` (that
-   overload carries no `[RequiresDynamicCode]`/`[RequiresUnreferencedCode]`) — but it is behavior-changing
-   (loses some `AddLocalRpcTarget` features) and is deferred to a future `aot-rpc-dispatch` capability.
+   `PublishAot` native binary in `aot-smoke/` runs catalog-based discovery with no reflection).
+   `aot-rpc-dispatch` (2.5.0) then made **dispatch** AOT-clean too: the generator also emits an
+   `IRpcMethodBinder` (separate opt-in `AddGeneratedRpcMethodBinder()`) that registers each RPC-interface
+   method via `JsonRpc.AddLocalRpcMethod(name, delegate)` (no AOT attributes) instead of the reflective
+   `AddLocalRpcTarget`; `RegisterServices` prefers the binder, else falls back to the (annotated) reflection
+   path. The `aot-smoke` native binary now binds dispatch via the generator with no reflection. ⚠ The
+   binder is **not** 1:1 with `AddLocalRpcTarget` — it exposes only **interface** methods and drops target
+   events / `RpcMarshalable` / `JsonRpcTargetOptions`; consumers needing those keep the reflection path
+   (don't register the binder). **Still do not flip `<IsAotCompatible>true</IsAotCompatible>` on the
+   library**: StreamJsonRpc's own formatter/envelope serialization is not AOT-clean in 2.21.69 (publish
+   shows `IL3053`/`IL2104` on `StreamJsonRpc.dll` + transitive `Newtonsoft.Json`) — end-to-end AOT RPC
+   payloads are an upstream gap, not ours. Honoring `[JsonRpcMethod]`/`[JsonRpcIgnore]` + camelCase is in
+   the binder; unsupported method shapes (generic/ref/out/in/>16 params) emit `WSRPC002` and are skipped.
 5. **No unbounded parse-failure loop.** The malformed-JSON recovery path in
    `WebSocketMessageHandler` is bounded: after `JsonRpcServerConfig.MaxConsecutiveParseFailures`
    (default 10) it closes the connection with `ProtocolError`. ✅ Shipped in `security-hardening` (1.2.0).
@@ -137,7 +144,7 @@ Path-scoped agent instructions live in `.claude/rules/` (load conditionally when
 This repo is mid-maturation. The current floor, established by `foundation-cluster-1` (→ 1.1.0):
 
 - **Build hygiene:** 0 warnings, `TreatWarningsAsErrors=true` on lib + tests; shared `Directory.Build.props`.
-- **Tests:** unit suite green (**125**). Adding a feature that touches an open audit finding SHOULD add the matching regression-guard test (see `.claude/rules/audit-debt.md`).
+- **Tests:** unit suite green (**128**). Adding a feature that touches an open audit finding SHOULD add the matching regression-guard test (see `.claude/rules/audit-debt.md`).
 - **Process:** non-trivial work goes through OpenSpec (`openspec/changes/<name>/`); `AUDIT-FINDINGS.md` is the prioritized backlog (4 HIGH / 9 MEDIUM / 7 LOW — **all now shipped/resolved**).
 
 ## Implemented / planned
@@ -151,7 +158,8 @@ This repo is mid-maturation. The current floor, established by `foundation-clust
 - `low-severity-polish` (**2.2.0**) — M1 + the LOW band: M1 (`AbstractEventProcessor` auto-unregisters a client after N consecutive delivery failures, default 5, ctor-configurable; `HandleClientFailure` hook kept), L1 (`RegisterClient` → `TryAdd` + Warning on duplicate), L2 (`Subscriptions` → `ConcurrentBag`), L3 (`OnWsPing` `new` → `override` — NetCoreServer made the base virtual, so `new` silently bypassed our handler; guarded), L4 (enqueue-semantics XML docs), L6 (`RpcErrorException` sealed). L5/L7 already resolved/shipped. 5 new guard tests; suite 116 → 121. See `openspec/changes/low-severity-polish/`.
 - `registry-sourcegen-discovery` (**2.3.0**) — rule #4 / H3 AOT follow-up: new `src/WsRpcServer.SourceGenerator` (Roslyn `IIncrementalGenerator`) emits a reflection-free `IRpcServiceCatalog` for any consumer that opts in with `[assembly: GenerateRpcServiceCatalog]` + `AddGeneratedRpcServiceCatalog()`. `AbstractRpcServiceRegistry` prefers an injected catalog; reflection scan kept as `[RequiresUnreferencedCode]`/`[RequiresDynamicCode]` fallback. Generator packed into the nupkg (`analyzers/dotnet/cs`). 4 new guard tests (generator-driver + runtime catalog); suite 121 → 125. **Does not** flip `IsAotCompatible` — StreamJsonRpc's `AddLocalRpcTarget` is the remaining external blocker. See `openspec/changes/registry-sourcegen-discovery/`.
 - `aot-readiness` (**2.4.0**) — made the source-gen discovery path **provably Native-AOT-clean**: `[DynamicallyAccessedMembers(PublicConstructors)]` on `AddJsonRpcCore<…>`'s 5 service generics (clears IL2091) + honest `[UnconditionalSuppressMessage]` at the reflection-fallback boundary (IL2026/IL3050/IL3000, justified by "catalog is the AOT path"). Result: **0 IL warnings** under `-p:IsAotCompatible=true`, and a real `dotnet publish -p:PublishAot=true` native binary (`aot-smoke/`) runs catalog-based discovery with no reflection (exit 0). Does **not** flip `IsAotCompatible` (RPC dispatch still uses StreamJsonRpc reflection — see rule #4). See `openspec/changes/aot-readiness/`.
-- **Backlog** (from `AUDIT-FINDINGS.md`): **empty** — all 20 findings shipped/resolved. The only open AOT item is `aot-rpc-dispatch` (source-gen `AddLocalRpcMethod` to replace `AddLocalRpcTarget`), a behavior-changing follow-up pending sign-off — see rule #4. The StreamJsonRpc-replacement question was researched (spike) and rejected: the in-library `AddLocalRpcMethod` path is the cheaper, lower-risk route.
+- `aot-rpc-dispatch` (**2.5.0**) — made RPC **dispatch** Native-AOT-clean: the generator also emits an `IRpcMethodBinder` (separate opt-in `AddGeneratedRpcMethodBinder()`) that registers each RPC-interface method via source-generated `JsonRpc.AddLocalRpcMethod(name, delegate)` (no AOT attributes) instead of the reflective `AddLocalRpcTarget`; `RegisterServices` prefers the binder, else falls back to the annotated reflection path. Honors `[JsonRpcMethod]`/`[JsonRpcIgnore]` + camelCase; unsupported method shapes → `WSRPC002`, skipped. `aot-smoke` native binary binds dispatch via the generator (exit 0, no reflection). 3 new guard tests; suite 125 → 128. ⚠ Behavior trade-off: binder exposes only interface methods, drops target events / RpcMarshalable / JsonRpcTargetOptions (reflection path kept for those). Does **not** flip `IsAotCompatible` — StreamJsonRpc payload serialization (2.21.69) is the upstream gap (IL3053 on StreamJsonRpc.dll). See `openspec/changes/aot-rpc-dispatch/`.
+- **Backlog** (from `AUDIT-FINDINGS.md`): **empty** — all 20 findings shipped/resolved, plus the AOT track (`registry-sourcegen-discovery` → `aot-readiness` → `aot-rpc-dispatch`) is complete for the part we own (discovery + dispatch). The remaining AOT limit is **upstream**: StreamJsonRpc 2.21.69's formatter/envelope serialization isn't AOT-clean (IL3053), so `<IsAotCompatible>true</IsAotCompatible>` stays off until StreamJsonRpc ships an AOT-safe formatter. The StreamJsonRpc-replacement question was researched (spike) and rejected.
 
 ## Git
 

@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using StreamJsonRpc;
 using WsRpcServer.Services;
 using WsRpcServer.SourceGenerator;
 using Xunit;
@@ -54,6 +55,53 @@ namespace WsRpcServer.Tests.Services
             Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
         }
 
+        private const string SampleWithMethods = """
+            using WsRpcServer.Services;
+            using StreamJsonRpc;
+
+            [assembly: GenerateRpcServiceCatalog]
+
+            namespace Sample
+            {
+                public interface IMathRpc : IRpcService
+                {
+                    System.Threading.Tasks.Task<int> Add(int a, int b);
+                    void Reset();
+                    [JsonRpcMethod("custom.name")] string Named();
+                    [JsonRpcIgnore] void Hidden();
+                }
+
+                public sealed class MathRpc : IMathRpc
+                {
+                    public System.Threading.Tasks.Task<int> Add(int a, int b) => System.Threading.Tasks.Task.FromResult(a + b);
+                    public void Reset() { }
+                    public string Named() => "x";
+                    public void Hidden() { }
+                }
+            }
+            """;
+
+        [Fact]
+        public void Generator_EmitsBinderWithAddLocalRpcMethod()
+        {
+            var (output, generated, diagnostics) = RunGenerator(SampleWithMethods);
+
+            Assert.DoesNotContain(diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+
+            // Binder реєструє кожен метод через AddLocalRpcMethod із делегатом, прив'язаним на компіляції.
+            Assert.Contains("AddGeneratedRpcMethodBinder", generated);
+            Assert.Contains(
+                "jsonRpc.AddLocalRpcMethod(\"add\", new global::System.Func<int, int, global::System.Threading.Tasks.Task<int>>(",
+                generated);
+            Assert.Contains("jsonRpc.AddLocalRpcMethod(\"reset\", new global::System.Action(", generated);
+            // [JsonRpcMethod] перевизначає ім'я; [JsonRpcIgnore] метод не реєструється.
+            Assert.Contains("jsonRpc.AddLocalRpcMethod(\"custom.name\", ", generated);
+            Assert.DoesNotContain("\"hidden\"", generated);
+
+            // Згенерований binder валідний C# (компілюється проти реального StreamJsonRpc).
+            Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+        }
+
         [Fact]
         public void Generator_WithoutMarker_EmitsNothing()
         {
@@ -84,6 +132,7 @@ namespace WsRpcServer.Tests.Services
                 typeof(IRpcServiceCatalog).Assembly,                 // WsRpcServer
                 typeof(IServiceCollection).Assembly,                 // Microsoft.Extensions.DependencyInjection.Abstractions
                 typeof(ServiceCollectionDescriptorExtensions).Assembly,
+                typeof(JsonRpc).Assembly,                            // StreamJsonRpc (binder посилається на JsonRpc)
             };
 
             var locations = AppDomain.CurrentDomain.GetAssemblies()

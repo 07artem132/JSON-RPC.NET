@@ -72,12 +72,22 @@ business logic. Every pattern below exists to keep that extension seam safe and 
   `-p:IsAotCompatible=true`; and `aot-smoke/` is a real `PublishAot` native binary that runs catalog-based
   discovery (exit 0, no reflection). Re-measure with
   `dotnet build src/WsRpcServer/WsRpcServer.csproj -p:IsAotCompatible=true -p:TreatWarningsAsErrors=false`.
-- **Still do NOT set `<IsAotCompatible>true</IsAotCompatible>` on the library.** RPC *dispatch* in
-  `RegisterServices` still calls StreamJsonRpc's `JsonRpc.AddLocalRpcTarget(...)` (reflection/dynamic proxy).
-  A spike confirmed the in-library AOT-clean alternative is `JsonRpc.AddLocalRpcMethod(name, delegate)` (no
-  AOT attributes on that overload); source-generating those per method is the deferred, behavior-changing
-  `aot-rpc-dispatch` capability. Replacing StreamJsonRpc wholesale was researched and rejected (its server
-  surface we use is narrow, and the `AddLocalRpcMethod` route is far cheaper).
+- **Dispatch is also AOT-clean (opt-in).** ✅ `aot-rpc-dispatch` (2.5.0): the generator also emits
+  `RpcMethodBinder : IRpcMethodBinder` (+ separate `AddGeneratedRpcMethodBinder()`). `RegisterServices`
+  prefers an injected `IRpcMethodBinder` and binds each RPC-interface method via
+  `JsonRpc.AddLocalRpcMethod(name, delegate)` (no AOT attributes) instead of the reflective
+  `AddLocalRpcTarget` (now `RegisterServicesViaReflection`, annotated + suppressed at the boundary). The
+  binder is a **separate** opt-in from the catalog so existing consumers don't silently change dispatch.
+  Generator details: camelCase names (or `[JsonRpcMethod]` override), `[JsonRpcIgnore]` skipped, regular
+  services resolved from DI, client-aware constructed (single ctor: `Guid`→clientId, else GetRequiredService),
+  unsupported method shapes (generic/ref/out/in/>16 params) → `WSRPC002` + skipped.
+- **Trade-off (documented):** the binder exposes only **interface** methods and drops `AddLocalRpcTarget`
+  features (target events, `RpcMarshalable`, `JsonRpcTargetOptions`). Consumers needing those keep the
+  reflection path (don't register the binder).
+- **Still do NOT set `<IsAotCompatible>true</IsAotCompatible>` on the library.** Even with discovery + dispatch
+  AOT-clean, StreamJsonRpc 2.21.69's own formatter/envelope serialization isn't AOT-clean (publish flags
+  `IL3053`/`IL2104` on `StreamJsonRpc.dll` + transitive `Newtonsoft.Json`); end-to-end AOT RPC payloads are
+  the remaining **upstream** gap. Replacing StreamJsonRpc wholesale was researched and rejected.
 
 ## Transport / parse-recovery (audit finding H2)
 

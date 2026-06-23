@@ -103,12 +103,46 @@ public abstract class AbstractRpcServiceRegistry(
     /// Використання StreamJsonRpc.JsonRpc.AddLocalRpcTarget дозволяє зробити
     /// методи сервісів доступними для виклику через JSON-RPC протокол.
     /// </remarks>
+    [UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification =
+            "Source-генерований IRpcMethodBinder — основний (AOT-безпечний) шлях диспетчу. Рефлексійний " +
+            "AddLocalRpcTarget викликається ЛИШЕ коли binder не зареєстровано; trim/AOT-споживачі реєструють " +
+            "його через AddGeneratedRpcMethodBinder, тож ця гілка для них недосяжна.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050",
+        Justification = "Див. IL2026 вище: рефлексійний AddLocalRpcTarget виконується лише без зареєстрованого binder'а.")]
     public virtual void RegisterServices(JsonRpc jsonRpc, Guid clientId)
     {
         ArgumentNullException.ThrowIfNull(jsonRpc);
 
         AbstractRpcServiceRegistryLog.RegisteringServices(Logger, clientId);
 
+        // AOT-шлях: якщо зареєстровано source-генерований binder — диспетч без рефлексії.
+        if (ServiceProvider.GetService(typeof(IRpcMethodBinder)) is IRpcMethodBinder binder)
+        {
+            binder.Bind(jsonRpc, ServiceProvider, clientId);
+            AbstractRpcServiceRegistryLog.BinderUsed(Logger, clientId);
+            return;
+        }
+
+        RegisterServicesViaReflection(jsonRpc, clientId);
+    }
+
+    /// <summary>
+    /// Рефлексійний fallback диспетчу: реєструє сервіси через <c>JsonRpc.AddLocalRpcTarget</c> (старий шлях).
+    /// </summary>
+    /// <param name="jsonRpc">Екземпляр JSON-RPC.</param>
+    /// <param name="clientId">Ідентифікатор клієнта.</param>
+    /// <remarks>
+    /// <c>AddLocalRpcTarget</c> сканує тип у рантаймі — несумісно з trim/AOT. Для AOT зареєструй
+    /// source-генерований <see cref="IRpcMethodBinder"/> через <c>AddGeneratedRpcMethodBinder</c>.
+    /// </remarks>
+    [RequiresUnreferencedCode(
+        "Рефлексійний диспетч (AddLocalRpcTarget) несумісний із trimming. Використовуй source-генерований " +
+        "IRpcMethodBinder (AddGeneratedRpcMethodBinder).")]
+    [RequiresDynamicCode(
+        "Рефлексійний диспетч (AddLocalRpcTarget) несумісний із Native AOT. Використовуй source-генерований IRpcMethodBinder.")]
+    private void RegisterServicesViaReflection(JsonRpc jsonRpc, Guid clientId)
+    {
         var cache = GetServiceTypeCache();
         int successCount = 0;
 
@@ -137,7 +171,7 @@ public abstract class AbstractRpcServiceRegistry(
         {
             try
             {
-                // Використовуємо ActivatorUtilities для створення екземпляра з 
+                // Використовуємо ActivatorUtilities для створення екземпляра з
                 // передачею clientId у конструктор
                 var service = ActivatorUtilities.CreateInstance(ServiceProvider, implType, clientId);
                 jsonRpc.AddLocalRpcTarget(service, StandardOptions);

@@ -1207,6 +1207,17 @@
             методи сервісів доступними для виклику через JSON-RPC протокол.
             </remarks>
         </member>
+        <member name="M:WsRpcServer.Services.AbstractRpcServiceRegistry.RegisterServicesViaReflection(StreamJsonRpc.JsonRpc,System.Guid)">
+            <summary>
+            Рефлексійний fallback диспетчу: реєструє сервіси через <c>JsonRpc.AddLocalRpcTarget</c> (старий шлях).
+            </summary>
+            <param name="jsonRpc">Екземпляр JSON-RPC.</param>
+            <param name="clientId">Ідентифікатор клієнта.</param>
+            <remarks>
+            <c>AddLocalRpcTarget</c> сканує тип у рантаймі — несумісно з trim/AOT. Для AOT зареєструй
+            source-генерований <see cref="T:WsRpcServer.Services.IRpcMethodBinder"/> через <c>AddGeneratedRpcMethodBinder</c>.
+            </remarks>
+        </member>
         <member name="M:WsRpcServer.Services.AbstractRpcServiceRegistry.GetTargetAssemblies">
             <summary>
             Отримує список збірок, що містять RPC-сервіси.
@@ -1376,6 +1387,31 @@
              }
              </code>
              </remarks>
+        </member>
+        <member name="T:WsRpcServer.Services.IRpcMethodBinder">
+             <summary>
+             Reflection-free прив'язувач RPC-методів до екземпляра <see cref="T:StreamJsonRpc.JsonRpc"/>.
+             </summary>
+             <remarks>
+             Реалізація генерується source-генератором у збірці споживача (коли та позначена
+             <see cref="T:WsRpcServer.Services.GenerateRpcServiceCatalogAttribute"/>) і реєструється через <c>AddGeneratedRpcMethodBinder</c>.
+             Замість рефлексійного <c>JsonRpc.AddLocalRpcTarget(object)</c> (який сканує тип у рантаймі —
+             IL2026/IL3050) генерований binder викликає <c>JsonRpc.AddLocalRpcMethod(name, delegate)</c> на кожен
+             метод RPC-інтерфейсу, зв'язуючи делегат на етапі компіляції. Це робить ДИСПЕТЧ сумісним із Native AOT.
+            
+             Якщо binder зареєстровано в DI, <see cref="M:WsRpcServer.Services.AbstractRpcServiceRegistry.RegisterServices(StreamJsonRpc.JsonRpc,System.Guid)"/> використовує
+             його; інакше повертається до рефлексійного <c>AddLocalRpcTarget</c> (стара поведінка). Це окремий opt-in
+             від <see cref="T:WsRpcServer.Services.IRpcServiceCatalog"/> (виявлення), бо delegate-шлях має інші компроміси, ніж
+             <c>AddLocalRpcTarget</c> (експонує лише методи інтерфейсу; без подій таргета / RpcMarshalable / тощо).
+             </remarks>
+        </member>
+        <member name="M:WsRpcServer.Services.IRpcMethodBinder.Bind(StreamJsonRpc.JsonRpc,System.IServiceProvider,System.Guid)">
+            <summary>
+            Реєструє всі RPC-методи виявлених сервісів у наданому екземплярі <paramref name="jsonRpc"/>.
+            </summary>
+            <param name="jsonRpc">Екземпляр JSON-RPC, у якому реєструються методи.</param>
+            <param name="serviceProvider">Постачальник сервісів для резолву звичайних сервісів та залежностей.</param>
+            <param name="clientId">Ідентифікатор клієнта (для клієнт-залежних сервісів).</param>
         </member>
         <member name="T:WsRpcServer.Services.IRpcService">
             <summary>

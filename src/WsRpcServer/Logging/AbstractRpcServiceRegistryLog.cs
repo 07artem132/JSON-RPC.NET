@@ -40,4 +40,8 @@ internal static partial class AbstractRpcServiceRegistryLog
     [LoggerMessage(EventId = 1308, Level = LogLevel.Debug,
         Message = "Використано source-генерований каталог RPC-сервісів ({Count} сервісів) — без рефлексії")]
     public static partial void CatalogUsed(ILogger logger, int count);
+
+    [LoggerMessage(EventId = 1309, Level = LogLevel.Debug,
+        Message = "Диспетч через source-генерований IRpcMethodBinder для клієнта {ClientId} — без рефлексії")]
+    public static partial void BinderUsed(ILogger logger, Guid clientId);
 }
