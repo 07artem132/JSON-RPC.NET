@@ -586,6 +586,19 @@
             що запобігає витоку ресурсів при проблемних клієнтах.
             </remarks>
         </member>
+        <member name="P:WsRpcServer.Core.JsonRpcServerConfig.MaxConsecutiveParseFailures">
+            <summary>
+            Максимальна кількість послідовних помилок розбору JSON, після якої з'єднання примусово закривається.
+            За замовчуванням 10.
+            </summary>
+            <remarks>
+            Захист від DoS-вектора: зловмисник може надсилати потік невалідного JSON, змушуючи сервер
+            нескінченно виконувати цикл відновлення (rent буфера + лінійний скан) і насичувати CPU на одному
+            з'єднанні. Після цієї кількості послідовних невдалих розборів з'єднання закривається зі статусом
+            <see cref="F:System.Net.WebSockets.WebSocketCloseStatus.ProtocolError"/>. Лічильник скидається після
+            кожного успішного розбору повідомлення.
+            </remarks>
+        </member>
         <member name="T:WsRpcServer.Events.AbstractEventProcessor">
             <summary>
             Абстрактний базовий клас для обробників подій.
@@ -1027,16 +1040,23 @@
             Кеш типів сервісів, отриманих через рефлексію.
             Заповнюється при першому виклику GetServiceTypeCache.
             </summary>
+            <remarks>
+            <c>volatile</c> разом із двократно-перевіреним блокуванням на <see cref="F:WsRpcServer.Services.AbstractRpcServiceRegistry._cacheLock"/>
+            гарантує, що кеш будується рівно один раз навіть при конкурентному першому використанні
+            (RegisterServices викликається для кожного нового клієнта, тож старти кількох з'єднань
+            одночасно інакше гонилися б і будували кеш двічі — H3).
+            </remarks>
+        </member>
+        <member name="F:WsRpcServer.Services.AbstractRpcServiceRegistry._cacheLock">
+            <summary>
+            Блокування для потокобезпечної одноразової побудови <see cref="F:WsRpcServer.Services.AbstractRpcServiceRegistry._serviceTypeCache"/>.
+            </summary>
         </member>
         <member name="M:WsRpcServer.Services.AbstractRpcServiceRegistry.GetServiceTypeCache">
             <summary>
-            Отримує кеш типів сервісів, створюючи його при першому виклику.
+            Отримує кеш типів сервісів, створюючи його при першому виклику (потокобезпечно, рівно раз).
             </summary>
             <returns>Кеш типів сервісів.</returns>
-            <remarks>
-            Використовує ледачу ініціалізацію (lazy initialization) для створення кешу
-            лише при необхідності, що дозволяє уникнути сканування збірок до першого використання.
-            </remarks>
         </member>
         <member name="M:WsRpcServer.Services.AbstractRpcServiceRegistry.RegisterServices(StreamJsonRpc.JsonRpc,System.Guid)">
             <summary>
@@ -1691,6 +1711,17 @@
             <summary>
             Обробник повідомлень WebSocket, що інтегрує NetCoreServer із StreamJsonRpc.
             Забезпечує ефективну обробку повідомлень з буферизацією та обробкою помилок.
+            </summary>
+        </member>
+        <member name="F:WsRpcServer.Transport.WebSocketMessageHandler._consecutiveParseFailures">
+            <summary>
+            Лічильник послідовних помилок розбору JSON. Скидається після успішної десеріалізації;
+            при досягненні <see cref="P:WsRpcServer.Core.JsonRpcServerConfig.MaxConsecutiveParseFailures"/> з'єднання закривається.
+            </summary>
+        </member>
+        <member name="F:WsRpcServer.Transport.WebSocketMessageHandler._maxConsecutiveParseFailures">
+            <summary>
+            Поріг послідовних помилок розбору, після якого з'єднання примусово закривається (H2 anti-DoS).
             </summary>
         </member>
         <member name="M:WsRpcServer.Transport.WebSocketMessageHandler.ProcessReceivedDataAsync(System.ReadOnlyMemory{System.Byte})">
