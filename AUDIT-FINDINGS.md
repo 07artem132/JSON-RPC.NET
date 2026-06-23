@@ -13,7 +13,8 @@
 - **`foundation-cluster-1` (1.1.0):** M6 (warnings → 0), M7 (README org refs).
 - **`security-hardening` (1.2.0):** ✅ **H2** (parse-failure throttle), ✅ **H3** (registry thread-safety + multi-impl warning), ✅ **H4** (cancel-before-dispose), ✅ **M9** (CanRead/CanWrite on dispose), plus the transitive **MessagePack** advisory (GHSA-hv8m-jj95-wg3x) pinned out. Each HIGH finding has a regression-guard test; build now passes with the NuGet audit **enabled**. Unit suite 83 → 90.
 - **`ci-bootstrap`:** ✅ **M8** (`.github/workflows/build.yml` — NuGet vulnerability-audit gate + warnings-as-errors build + 90-test suite on push/PR) and the **M7** broken build badge (→ `build.yml`).
-- **Still open:** H1 (composition root), M1–M5, L1–L7. See the table below.
+- **`composition-and-config` (1.3.0):** ✅ **H1** (full composition root — generic `AddJsonRpcCore<…>` registers all 5 services + concrete server + idempotency marker) and ✅ **M5** (`JsonRpcServerConfig` DataAnnotations + source-gen `[OptionsValidator]` fail-fast validation). Each guarded by a test; suite 90 → 112.
+- **Still open:** M1–M4, L1–L7. See the table below.
 
 ---
 
@@ -31,7 +32,7 @@ Each finding includes: **what**, **where** (`file:line`), **why**, **proposed fi
 
 ## 🔴 HIGH
 
-### H1. `AddJsonRpcCore` composition root incomplete — consumers must manually register 4 core services + concrete server
+### H1. `AddJsonRpcCore` composition root incomplete — consumers must manually register 4 core services + concrete server  ✅ SHIPPED (`composition-and-config`, 1.3.0)
 
 **Where:** `src/WsRpcServer/Extensions/JsonRpcCoreExtensions.cs:19-30` + leaked into `example/SimpleServer/Program.cs:58-74` (17 lines of boilerplate).
 
@@ -193,7 +194,7 @@ public interface ISubscriptionManager<TEventType, TArgs>
 
 ---
 
-### M5. `JsonRpcServerConfig` — no validation, no `[Range]`/`[Required]` attributes
+### M5. `JsonRpcServerConfig` — no validation, no `[Range]`/`[Required]` attributes  ✅ SHIPPED (`composition-and-config`, 1.3.0)
 
 **Where:** `src/WsRpcServer/Core/JsonRpcServerConfig.cs:17-82`.
 

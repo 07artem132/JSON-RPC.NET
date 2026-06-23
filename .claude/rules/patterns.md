@@ -10,14 +10,16 @@ business logic. Every pattern below exists to keep that extension seam safe and 
 
 ## DI composition root
 
-- `Extensions/JsonRpcCoreExtensions.AddJsonRpcCore(...)` is the single composition root. Today it
-  registers only `JsonRpcServerConfig` — the consumer hand-wires the other 5 services
-  (`IRpcServiceRegistry`, `ISubscriptionManager`, `IEventProcessor`, the concrete server + session).
-  That's audit finding **H1**: the goal state is a generic-parameterized overload that registers all
-  core services + the concrete server, plus an **idempotency guard** (a private marker type, the
-  SignalCli.NET `SignalCliRegistrationMarker` pattern) so repeated `AddJsonRpcCore` calls are a no-op.
-- "One concrete instance, two service roles" → register the concrete type once, then add the interface
-  registration as `sp => sp.GetRequiredService<TConcrete>()`. Don't register the concrete type twice.
+- `Extensions/JsonRpcCoreExtensions.AddJsonRpcCore(...)` is the single composition root. ✅ H1 shipped
+  (`composition-and-config`, 1.3.0): the generic overload
+  `AddJsonRpcCore<TServer, TSession, TEventProcessor, TSubscriptionManager, TRegistry>(...)` registers
+  all 5 core services + builds the concrete server from validated config, with an **idempotency guard**
+  (private `JsonRpcCoreMarker` sentinel + `TryAdd*`) so repeated calls are a no-op. The config-only
+  overload remains for callers that wire their own services. Guarded by `AddJsonRpcCoreCompositionTests`.
+- "One concrete instance, two service roles" → register the concrete type once (`TryAddSingleton<TConcrete>()`),
+  then add the interface registration as `sp => sp.GetRequiredService<TConcrete>()`. Don't register the
+  concrete type twice. (Exactly what the generic `AddJsonRpcCore` does for the event processor +
+  subscription manager.)
 
 ## Disposal + cancellation (audit finding H4)
 
@@ -63,6 +65,12 @@ business logic. Every pattern below exists to keep that extension seam safe and 
 
 ## Configuration (audit finding M5)
 
-- `JsonRpcServerConfig` currently has no validation. The goal state mirrors SignalCli.NET's options
-  pattern: `[Range]`/`[Required]` DataAnnotations + `IOptions<T>` + source-gen `[OptionsValidator]`,
-  validated fail-fast on host start (`Port` ∈ [1,65535], `NotificationQueueSize` ≥ 1, non-empty `Host`).
+- ✅ M5 shipped (`composition-and-config`, 1.3.0): `JsonRpcServerConfig` carries `[Range]`/`[Required]`
+  DataAnnotations + a source-gen `[OptionsValidator]` (`JsonRpcServerConfigValidator`, reflection-free)
+  wired through `AddJsonRpcCore` via `AddOptionsWithValidateOnStart`, with a `.Validate(...)` cross-field
+  rule for the `TimeSpan` `NotificationTimeout` (no DataAnnotation fits it). Validated fail-fast
+  (`Port` ∈ [1,65535], `NotificationQueueSize`/`MaxMessageSizeBytes`/`PipeThresholdBytes`/
+  `MaxConsecutiveParseFailures` ≥ 1, non-empty `Host`, positive `NotificationTimeout`). The direct
+  `Microsoft.Extensions.Options` package reference is required so the source generator runs (analyzers
+  don't flow transitively). Don't re-add reflection-based `.ValidateDataAnnotations()` alongside it.
+  Guarded by `JsonRpcServerConfigValidationTests`.

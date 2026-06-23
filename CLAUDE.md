@@ -87,20 +87,29 @@ Path-scoped agent instructions live in `.claude/rules/` (load conditionally when
 5. **No unbounded parse-failure loop.** The malformed-JSON recovery path in
    `WebSocketMessageHandler` is bounded: after `JsonRpcServerConfig.MaxConsecutiveParseFailures`
    (default 10) it closes the connection with `ProtocolError`. ✅ Shipped in `security-hardening` (1.2.0).
-6. **Composition root stays in the library, not the consumer.** `AddJsonRpcCore` should register
-   the core services + concrete server so consumers don't hand-wire 5 services. Open finding **H1**.
-7. **Comments and log messages are written in Ukrainian** — match the surrounding code when editing.
+6. **Composition root stays in the library, not the consumer.** The generic
+   `AddJsonRpcCore<TServer, TSession, TEventProcessor, TSubscriptionManager, TRegistry>(...)` registers
+   all 5 core services + the concrete server (built from validated config) so consumers don't hand-wire
+   them; registration is idempotent (sentinel marker + `TryAdd*`). ✅ Shipped in `composition-and-config`
+   (1.3.0), guarded by `AddJsonRpcCoreCompositionTests`.
+7. **Config is validated fail-fast.** `JsonRpcServerConfig` carries `[Range]`/`[Required]` DataAnnotations
+   + a source-gen `[OptionsValidator]` (`JsonRpcServerConfigValidator`, reflection-free) wired through
+   `AddJsonRpcCore`; invalid config throws `OptionsValidationException` on resolve. ✅ Shipped in
+   `composition-and-config` (1.3.0), guarded by `JsonRpcServerConfigValidationTests`. Don't re-add
+   `.ValidateDataAnnotations()` (reflection-based) alongside the source-gen validator.
+8. **Comments and log messages are written in Ukrainian** — match the surrounding code when editing.
 
-> Rules 3-5 shipped in `security-hardening` (1.2.0) — each with a regression-guard test (see
-> `tests/WsRpcServer.Tests/{Transport,Sessions,Events,Subscriptions,Services}`). Rule 6 (H1) is still
-> open. When you fix a remaining finding, add its guard test and move its bullet to a shipped state.
+> Rules 3-5 shipped in `security-hardening` (1.2.0); rules 6-7 shipped in `composition-and-config`
+> (1.3.0) — each with a regression-guard test (see
+> `tests/WsRpcServer.Tests/{Transport,Sessions,Events,Subscriptions,Services,Core,Extensions}`).
+> When you fix a remaining finding, add its guard test and move its bullet to a shipped state.
 
 ## Maturity baseline (do not regress below this)
 
 This repo is mid-maturation. The current floor, established by `foundation-cluster-1` (→ 1.1.0):
 
 - **Build hygiene:** 0 warnings, `TreatWarningsAsErrors=true` on lib + tests; shared `Directory.Build.props`.
-- **Tests:** unit suite green (**90**). Adding a feature that touches an open audit finding SHOULD add the matching regression-guard test (see `.claude/rules/audit-debt.md`).
+- **Tests:** unit suite green (**112**). Adding a feature that touches an open audit finding SHOULD add the matching regression-guard test (see `.claude/rules/audit-debt.md`).
 - **Process:** non-trivial work goes through OpenSpec (`openspec/changes/<name>/`); `AUDIT-FINDINGS.md` is the prioritized backlog (4 HIGH / 9 MEDIUM / 7 LOW).
 
 ## Implemented / planned
@@ -108,7 +117,8 @@ This repo is mid-maturation. The current floor, established by `foundation-clust
 - `foundation-cluster-1` (**1.1.0**) — build hygiene: `readme-org-fix`, `directory-build-props`, `warnings-cleanup` (439→0), `treat-warnings-errors`. See `openspec/changes/foundation-cluster-1/`.
 - `security-hardening` (**1.2.0**) — the 4 critical items: `dependency-vuln-messagepack` (MessagePack advisory), `parse-failure-throttle` (H2 + M9), `dispose-cancellation` (H4), `service-registry-thread-safety` (H3). Each guarded by a test; build passes with NuGet audit on; suite 83 → 90. See `openspec/changes/security-hardening/`.
 - `ci-bootstrap` — `.github/workflows/build.yml` (`CI`): NuGet vulnerability-audit gate + warnings-as-errors build + the 90-test suite on push/PR. Closes M8 + the broken README build badge (M7). No version bump (CI is not shippable).
-- **Backlog** (from `AUDIT-FINDINGS.md`, ordered low-risk first): `config-validation` (M5) → `composition-root-complete` (H1) → `subscription-manager-cleanup` (M2/M3/M4) → `logger-message-migration` → registry AOT source-gen alternative.
+- `composition-and-config` (**1.3.0**) — `config-validation` (M5: `JsonRpcServerConfig` DataAnnotations + source-gen `[OptionsValidator]` fail-fast) + `composition-root-complete` (H1: generic `AddJsonRpcCore<…>` registers all 5 services + concrete server + idempotency marker; consumer boilerplate removed from `example/SimpleServer/Program.cs`). Each guarded by a test; suite 90 → 112. See `openspec/changes/composition-and-config/`.
+- **Backlog** (from `AUDIT-FINDINGS.md`, ordered low-risk first): `subscription-manager-cleanup` (M2/M3/M4 — breaking `ISubscriptionManager` redesign) → `logger-message-migration` (CA1848/CA1873, ~190 sites) → registry AOT source-gen alternative.
 
 ## Git
 
