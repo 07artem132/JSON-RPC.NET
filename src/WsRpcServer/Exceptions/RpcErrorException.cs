@@ -16,7 +16,7 @@ namespace WsRpcServer.Exceptions;
 /// 
 /// Це дозволяє клієнтам отримувати структуровані помилки та обробляти їх відповідно до типу.
 /// </remarks>
-public class RpcErrorException : Exception
+public sealed class RpcErrorException : Exception
 {
     /// <summary>
     /// Код помилки JSON-RPC.

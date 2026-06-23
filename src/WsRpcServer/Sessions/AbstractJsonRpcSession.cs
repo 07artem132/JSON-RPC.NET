@@ -92,11 +92,16 @@ public abstract class AbstractJsonRpcSession(
     protected Task? NotificationProcessingTask { get; set; }
 
     /// <summary>
-    /// Надсилає сповіщення клієнту.
+    /// Ставить сповіщення в чергу на доставку клієнту (НЕ чекає на фактичну відправку).
     /// </summary>
     /// <param name="method">Ім'я методу сповіщення.</param>
     /// <param name="args">Аргументи сповіщення.</param>
-    /// <returns>Завдання, яке представляє асинхронну операцію відправки.</returns>
+    /// <returns>
+    /// Уже завершене <see cref="Task"/>: метод лише записує сповіщення в канал і повертається миттєво.
+    /// <c>await</c> на ньому НЕ чекає на доставку клієнту — фактична відправка відбувається у фоновому
+    /// циклі <see cref="ProcessNotificationsAsync"/> (L4: сигнатура асинхронна заради сумісності інтерфейсу,
+    /// але тіло синхронне — це постановка в чергу, а не відправка).
+    /// </returns>
     /// <remarks>
     /// Замість безпосередньої відправки, сповіщення додається до черги (NotificationChannel),
     /// яка потім обробляється у фоновому режимі методом ProcessNotificationsAsync.
@@ -238,10 +243,13 @@ public abstract class AbstractJsonRpcSession(
     }
 
     /// <summary>
-    /// Надсилає бінарні дані через WebSocket з'єднання.
+    /// Передає бінарні дані у вихідний буфер WebSocket (НЕ чекає на підтвердження відправки).
     /// </summary>
     /// <param name="data">Дані для надсилання.</param>
-    /// <returns>Завдання, яке представляє асинхронну операцію відправки.</returns>
+    /// <returns>
+    /// Уже завершене <see cref="Task"/>: метод викликає синхронний <c>SendBinaryAsync</c> NetCoreServer
+    /// і повертається миттєво. <c>await</c> на ньому НЕ гарантує, що дані вже залишили сокет (L4).
+    /// </returns>
     /// <remarks>
     /// Цей метод забезпечує низькорівневий доступ до відправки бінарних даних через WebSocket.
     /// Використовується для випадків, коли потрібна ефективна передача бінарних даних без 
@@ -285,10 +293,12 @@ public abstract class AbstractJsonRpcSession(
     /// 
     /// Додатково логує отримання ping повідомлення для діагностики.
     /// 
-    /// Використання ключового слова "new" замість "override" пов'язано з тим,
-    /// що базовий клас (NetCoreServer.WsSession) не позначає цей метод як virtual.
+    /// L3: метод позначено "override" (а не "new") — у поточній версії NetCoreServer
+    /// WsSession.OnWsPing віртуальний, тож фреймворк викликає САМЕ цю реалізацію через посилання
+    /// на базовий тип. З "new" наш код мовчки оминався б на внутрішньому шляху диспетчеризації ping'а.
+    /// Інваріант «база лишається virtual» пінить WsSessionOnWsPingGuardTests.
     /// </remarks>
-    public new void OnWsPing(byte[] buffer, long offset, long size)
+    public override void OnWsPing(byte[] buffer, long offset, long size)
     {
         AbstractJsonRpcSessionLog.PingReceived(Logger, Id);
 

@@ -143,6 +143,14 @@ namespace WsRpcServer.Tests.Exceptions
             Assert.Equal(complexErrorData.Details, retrievedData.Details);
         }
 
+        [Fact]
+        public void RpcErrorException_IsSealed()
+        {
+            // L6: типізований leaf-виняток має бути sealed (патерн typed-exception-leaf, як у SignalCli.NET) —
+            // він призначений для кидання, а не успадкування.
+            Assert.True(typeof(RpcErrorException).IsSealed);
+        }
+
         // Вспомогательный класс для тестирования сложных данных об ошибке
         private sealed class ComplexErrorData
         {

@@ -71,13 +71,22 @@ business logic. Every pattern below exists to keep that extension seam safe and 
 - `CanRead`/`CanWrite` should reflect disposal state (`=> !_disposed`), not hardcoded `true`, so
   StreamJsonRpc stops calling into a disposed handler.
 
-## Notification fan-out
+## Notification fan-out (audit findings M1/L1/L2)
 
-- `AbstractEventProcessor` fan-outs server→client notifications via a per-client handler registry.
-  Fire-and-forget notification tasks must route failures through a failure-counter (auto-unregister a
-  client after a threshold) rather than logging-and-forgetting — otherwise a broken client receives
-  infinite failed notifications. Use `TryAdd` (not indexer-overwrite) when registering a client and log
-  a Warning on duplicate registration.
+- ✅ Shipped in `low-severity-polish` (2.2.0). `AbstractEventProcessor` fan-outs server→client
+  notifications via a per-client handler registry. Fire-and-forget notification tasks route failures
+  through a built-in consecutive-failure counter (`_consecutiveFailures`): on the
+  `maxConsecutiveNotificationFailures`-th (ctor param, default 5) consecutive fault the client is
+  auto-`UnregisterClient`-ed + a Warning logged; a successful delivery resets the counter (M1). The
+  `HandleClientFailure(clientId)` hook is still called on every fault for derived-class customization
+  (metrics, back-off) — it is **additional** to, not a replacement for, the base auto-unregister.
+- `RegisterClient` uses `TryAdd` (not indexer-overwrite) and logs a Warning on a duplicate id before
+  overwriting (L1). `Subscriptions` is a `ConcurrentBag<IDisposable>` so derived classes can register
+  disposables from multiple threads (L2).
+- `AbstractJsonRpcSession.OnWsPing` is `override` (not `new`): the current NetCoreServer
+  `WsSession.OnWsPing` is virtual, so `new` would let the framework's internal ping dispatch bypass our
+  handler. `WsSessionOnWsPingGuardTests` pins both halves (base virtual + we genuinely override) — a
+  NetCoreServer bump that flips virtuality trips either the build (`override` won't compile) or the test.
 
 ## Logging (source-generated)
 

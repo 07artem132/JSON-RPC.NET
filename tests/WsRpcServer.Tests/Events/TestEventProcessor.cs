@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -10,7 +11,8 @@ using Xunit;
 namespace WsRpcServer.Tests.Events
 {
     // Test implementation that exposes protected members for testing
-    public class TestEventProcessor(ILogger logger) : AbstractEventProcessor(logger)
+    public class TestEventProcessor(ILogger logger, int maxConsecutiveNotificationFailures = 5)
+        : AbstractEventProcessor(logger, maxConsecutiveNotificationFailures)
     {
         // Expose protected methods for testing
         public void PublicNotifyClient(Guid clientId, string method, object eventArgs)
@@ -26,7 +28,7 @@ namespace WsRpcServer.Tests.Events
         // Expose protected fields through public properties
         public CancellationTokenSource CtsAccessor => Cts;
         public ConcurrentDictionary<Guid, Func<string, object[], Task>> ClientHandlersAccessor => ClientHandlers;
-        public List<IDisposable> SubscriptionsAccessor => Subscriptions;
+        public ConcurrentBag<IDisposable> SubscriptionsAccessor => Subscriptions;
         public bool IsDisposedAccessor => IsDisposed;
     }
 
@@ -345,6 +347,75 @@ namespace WsRpcServer.Tests.Events
             // Проверяем, что Dispose был вызван для каждой подписки только один раз,
             // несмотря на многократный вызов Dispose у _eventProcessor
             disposableMock.Verify(d => d.Dispose(), Times.Once);
+        }
+
+        [Fact]
+        public async Task NotifyClient_HandlerFailsRepeatedly_AutoUnregistersClientAfterThreshold()
+        {
+            // Arrange — M1: окремий процесор з низьким порогом, обробник що завжди падає.
+            using var processor = new TestEventProcessor(_loggerMock.Object, maxConsecutiveNotificationFailures: 3);
+            var clientId = Guid.NewGuid();
+            Func<string, object[], Task> failing = (method, args) =>
+                Task.FromException(new InvalidOperationException("boom"));
+            processor.RegisterClient(clientId, failing);
+
+            // Act — стріляємо рівно поріг сповіщень; кожне планує faulting-continuation, що інкрементує лічильник.
+            for (int i = 0; i < 3; i++)
+            {
+                processor.PublicNotifyClient(clientId, "testMethod", new object());
+            }
+
+            // Continuations виконуються на пулі потоків — чекаємо до авто-відписки (з таймаутом).
+            var deadline = DateTime.UtcNow.AddSeconds(2);
+            while (processor.ClientHandlersAccessor.ContainsKey(clientId) && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(20);
+            }
+
+            // Assert — клієнт автоматично відписаний + залоговано Warning про авто-відписку.
+            Assert.False(processor.ClientHandlersAccessor.ContainsKey(clientId));
+            _loggerMock.Verify(
+                x => x.Log(
+                    LogLevel.Warning,
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((o, t) => o!.ToString()!.Contains("автоматично відписаний")),
+                    (Exception?)null,
+                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                Times.AtLeastOnce);
+        }
+
+        [Fact]
+        public void RegisterClient_DuplicateId_LogsWarningAndOverwrites()
+        {
+            // Arrange — L1: дві реєстрації того самого clientId.
+            Func<string, object[], Task> first = (method, args) => Task.CompletedTask;
+            Func<string, object[], Task> second = (method, args) => Task.CompletedTask;
+
+            // Act
+            _eventProcessor.RegisterClient(_clientId, first);
+            _eventProcessor.RegisterClient(_clientId, second);
+
+            // Assert — ефективна "останній перемагає" семантика, але дубль залоговано Warning'ом (не безшумно).
+            Assert.Same(second, _eventProcessor.ClientHandlersAccessor[_clientId]);
+            _loggerMock.Verify(
+                x => x.Log(
+                    LogLevel.Warning,
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((o, t) => o!.ToString()!.Contains("вже зареєстрований")),
+                    (Exception?)null,
+                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                Times.Once);
+        }
+
+        [Fact]
+        public void Subscriptions_IsThreadSafeConcurrentBag()
+        {
+            // L2: базова властивість Subscriptions має бути потокобезпечною колекцією (не List).
+            var prop = typeof(AbstractEventProcessor).GetProperty(
+                "Subscriptions", BindingFlags.NonPublic | BindingFlags.Instance);
+
+            Assert.NotNull(prop);
+            Assert.Equal(typeof(ConcurrentBag<IDisposable>), prop!.PropertyType);
         }
     }
 }

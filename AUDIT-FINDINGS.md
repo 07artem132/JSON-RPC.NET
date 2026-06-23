@@ -16,7 +16,8 @@
 - **`composition-and-config` (1.3.0):** ✅ **H1** (full composition root — generic `AddJsonRpcCore<…>` registers all 5 services + concrete server + idempotency marker) and ✅ **M5** (`JsonRpcServerConfig` DataAnnotations + source-gen `[OptionsValidator]` fail-fast validation). Each guarded by a test; suite 90 → 112.
 - **`subscription-manager-cleanup` (2.0.0, BREAKING):** ✅ **M2** (base now uses `OperationLock` via template `*Core` methods), ✅ **M3** (`account` → `topic`), ✅ **M4** (`ISubscriptionManager<TEventType, TEventArgs>` generic, no `object`). Guarded by 2 new tests; suite 112 → 114.
 - **`logger-message-migration` (2.1.0):** closed the deferred `CA1848;CA1873` suppression left over from `warnings-cleanup` — all ~51 `ILogger` call sites in `src/WsRpcServer` moved onto source-generated `[LoggerMessage]` partials (5 new `Logging/*Log.cs`, EventId block per type). Repo-wide `<NoWarn>` removed; both perf rules now active in the lib (suppressed only in test/example projects). Guarded by `LoggerMessageMigrationTests`; suite 114 → 116.
-- **Still open:** M1, L1–L7. See the table below.
+- **`low-severity-polish` (2.2.0):** ✅ **M1** (`AbstractEventProcessor` built-in consecutive-failure counter → auto-unregister a persistently-failing client + Warning; `HandleClientFailure` hook kept), ✅ **L1** (`RegisterClient` uses `TryAdd` + Warning on duplicate), ✅ **L2** (`Subscriptions` → `ConcurrentBag`), ✅ **L3** (`OnWsPing`: `new` → `override` — NetCoreServer made the base virtual, so `new` was silently bypassing our handler; guarded), ✅ **L4** (enqueue-semantics XML docs), ✅ **L6** (`RpcErrorException` sealed). L5 was already resolved (file rewritten in `composition-and-config`); L7 already shipped (this repo now has `CLAUDE.md` + `.claude/rules/` + `openspec/`). Guarded by 5 new tests; suite 116 → 121.
+- **Still open:** registry AOT source-gen discovery alternative (rule #4 / H3 follow-up) — the lone remaining backlog item.
 
 ---
 
@@ -142,7 +143,7 @@ public async ValueTask DisposeAsync()
 
 ## 🟡 MEDIUM
 
-### M1. Fire-and-forget tasks — exceptions ловляться, але втрачаються
+### M1. Fire-and-forget tasks — exceptions ловляться, але втрачаються  ✅ SHIPPED (`low-severity-polish`, 2.2.0)
 
 **Where:** `src/WsRpcServer/Events/AbstractEventProcessor.cs:169-199` (`NotifyClient`).
 
@@ -282,7 +283,7 @@ public override bool CanWrite => !_disposed;
 
 ## 🟢 LOW
 
-### L1. `RegisterClient` overwrites silent — no warning on duplicate registration
+### L1. `RegisterClient` overwrites silent — no warning on duplicate registration  ✅ SHIPPED (`low-severity-polish`, 2.2.0)
 
 **Where:** `AbstractEventProcessor.cs:105-110`.
 
@@ -292,7 +293,7 @@ public override bool CanWrite => !_disposed;
 
 ---
 
-### L2. `Subscriptions` list (in EventProcessor) — not thread-safe
+### L2. `Subscriptions` list (in EventProcessor) — not thread-safe  ✅ SHIPPED (`low-severity-polish`, 2.2.0)
 
 **Where:** `AbstractEventProcessor.cs:55`: `protected readonly List<IDisposable> Subscriptions = new();`.
 
@@ -302,7 +303,7 @@ public override bool CanWrite => !_disposed;
 
 ---
 
-### L3. `OnWsPing` uses `new` instead of `override` — fragile if base method becomes virtual
+### L3. `OnWsPing` uses `new` instead of `override` — fragile if base method becomes virtual  ✅ SHIPPED (`low-severity-polish`, 2.2.0 — base became virtual; switched to `override`, guarded)
 
 **Where:** `AbstractJsonRpcSession.cs:298-304`.
 
@@ -312,7 +313,7 @@ public override bool CanWrite => !_disposed;
 
 ---
 
-### L4. `SendNotificationAsync` returns `Task` але body sync — misleading signature
+### L4. `SendNotificationAsync` returns `Task` але body sync — misleading signature  ✅ SHIPPED (`low-severity-polish`, 2.2.0 — XML-doc clarified; rename deliberately avoided as breaking)
 
 **Where:** `AbstractJsonRpcSession.cs:111-131`, `SendBinaryDataAsync:257-280`.
 
@@ -322,7 +323,7 @@ public override bool CanWrite => !_disposed;
 
 ---
 
-### L5. `JsonRpcCoreExtensions.AddJsonRpcCore` — extra blank line при кінці body
+### L5. `JsonRpcCoreExtensions.AddJsonRpcCore` — extra blank line при кінці body  ✅ RESOLVED (file rewritten in `composition-and-config`, 1.3.0)
 
 **Where:** `JsonRpcCoreExtensions.cs:28`.
 
@@ -330,7 +331,7 @@ Trivial style nit — extra blank line `services.AddSingleton(config);\n\n\nretu
 
 ---
 
-### L6. `RpcErrorException` — no parameterless ctor, no serialization support
+### L6. `RpcErrorException` — no parameterless ctor, no serialization support  ✅ SHIPPED (`low-severity-polish`, 2.2.0 — sealed; serialization not needed on .NET 8+)
 
 **Where:** `Exceptions/RpcErrorException.cs:19`.
 
@@ -340,7 +341,7 @@ Trivial style nit — extra blank line `services.AddSingleton(config);\n\n\nretu
 
 ---
 
-### L7. No CLAUDE.md / OpenSpec / `.claude/rules/` infrastructure
+### L7. No CLAUDE.md / OpenSpec / `.claude/rules/` infrastructure  ✅ SHIPPED (`CLAUDE.md` + `.claude/rules/` + `openspec/` present)
 
 **Where:** repo root.
 

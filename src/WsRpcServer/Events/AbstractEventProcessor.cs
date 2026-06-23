@@ -10,22 +10,45 @@ namespace WsRpcServer.Events;
 /// Реалізує базову логіку для управління клієнтами та їх сповіщеннями про події.
 /// </summary>
 /// <param name="logger">Логер для реєстрації подій обробника.</param>
+/// <param name="maxConsecutiveNotificationFailures">
+/// Поріг послідовних невдач доставки сповіщень одному клієнту, після якого клієнт
+/// автоматично відписується (M1). За замовчуванням 5. Має бути ≥ 1; щоб фактично вимкнути
+/// авто-відписку, передай дуже велике значення.
+/// </param>
 /// <remarks>
 /// Цей клас надає загальну інфраструктуру для обробки подій та управління клієнтами,
 /// залишаючи специфічну логіку отримання та обробки подій для реалізації у похідних класах.
-/// 
+///
 /// Використовує ConcurrentDictionary для потокобезпечного зберігання клієнтських обробників,
 /// що дозволяє додавати/видаляти клієнтів з різних потоків без додаткової синхронізації.
-/// 
+///
 /// Підтримує "fire and forget" модель для сповіщень, яка не блокує основний потік обробки подій,
-/// але при цьому забезпечує належну обробку помилок.
+/// але при цьому забезпечує належну обробку помилок: послідовні невдачі доставки рахуються, і після
+/// досягнення порогу клієнт автоматично відписується (щоб «зламаний» клієнт не отримував нескінченний
+/// потік failed-сповіщень).
 /// </remarks>
-public abstract class AbstractEventProcessor(ILogger logger) : IEventProcessor, IDisposable
+public abstract class AbstractEventProcessor(ILogger logger, int maxConsecutiveNotificationFailures = 5)
+    : IEventProcessor, IDisposable
 {
     /// <summary>
     /// Логер для реєстрації подій обробника.
     /// </summary>
     protected ILogger Logger { get; } = logger ?? throw new ArgumentNullException(nameof(logger));
+
+    /// <summary>
+    /// Поріг послідовних невдач доставки сповіщень, після якого клієнт авто-відписується (M1).
+    /// </summary>
+    private readonly int _maxConsecutiveNotificationFailures =
+        maxConsecutiveNotificationFailures >= 1
+            ? maxConsecutiveNotificationFailures
+            : throw new ArgumentOutOfRangeException(nameof(maxConsecutiveNotificationFailures),
+                maxConsecutiveNotificationFailures, "Поріг невдач має бути ≥ 1.");
+
+    /// <summary>
+    /// Лічильник послідовних невдач доставки сповіщень на клієнта (M1).
+    /// Скидається при успішній доставці та при (пере)реєстрації клієнта.
+    /// </summary>
+    private readonly ConcurrentDictionary<Guid, int> _consecutiveFailures = new();
 
     /// <summary>
     /// Словник клієнтських обробників сповіщень, індексованих за ідентифікатором клієнта.
@@ -52,8 +75,11 @@ public abstract class AbstractEventProcessor(ILogger logger) : IEventProcessor, 
     /// <remarks>
     /// Корисно для відстеження зовнішніх ресурсів (наприклад, підписок на події зовнішніх систем),
     /// які необхідно коректно звільнити при завершенні роботи обробника.
+    ///
+    /// <see cref="ConcurrentBag{T}"/> (а не <c>List</c>) — щоб похідні класи могли реєструвати
+    /// підписки з кількох потоків без зовнішньої синхронізації (L2). Порядок звільнення не важливий.
     /// </remarks>
-    protected List<IDisposable> Subscriptions { get; } = new();
+    protected ConcurrentBag<IDisposable> Subscriptions { get; } = new();
 
     /// <summary>
     /// Прапорець, що вказує, чи був обробник утилізований.
@@ -105,8 +131,20 @@ public abstract class AbstractEventProcessor(ILogger logger) : IEventProcessor, 
     /// </remarks>
     public virtual void RegisterClient(Guid clientId, Func<string, object[], Task> notificationHandler)
     {
-        ClientHandlers[clientId] = notificationHandler ??
-                                   throw new ArgumentNullException(nameof(notificationHandler));
+        ArgumentNullException.ThrowIfNull(notificationHandler);
+
+        // L1: не перезаписуємо мовчки. TryAdd → якщо клієнт уже є (повторна реєстрація / гонка),
+        // логуємо Warning і свідомо перезаписуємо (зберігаємо ефективну "останній перемагає"
+        // семантику, але вже не безшумно).
+        if (!ClientHandlers.TryAdd(clientId, notificationHandler))
+        {
+            AbstractEventProcessorLog.ClientAlreadyRegistered(Logger, clientId);
+            ClientHandlers[clientId] = notificationHandler;
+        }
+
+        // (Пере)реєстрація скидає лічильник невдач — це «свіжий» клієнт (M1).
+        _consecutiveFailures.TryRemove(clientId, out _);
+
         AbstractEventProcessorLog.ClientRegistered(Logger, clientId);
     }
 
@@ -120,6 +158,9 @@ public abstract class AbstractEventProcessor(ILogger logger) : IEventProcessor, 
     /// </remarks>
     public virtual void UnregisterClient(Guid clientId)
     {
+        // Прибираємо й лічильник невдач, щоб не лишати «осиротілий» запис (M1).
+        _consecutiveFailures.TryRemove(clientId, out _);
+
         if (ClientHandlers.TryRemove(clientId, out _))
         {
             AbstractEventProcessorLog.ClientUnregistered(Logger, clientId);
@@ -211,9 +252,12 @@ public abstract class AbstractEventProcessor(ILogger logger) : IEventProcessor, 
                         if (t.IsFaulted)
                         {
                             AbstractEventProcessorLog.NotifyClientError(Logger, t.Exception!, method, clientId);
-
-                            // Розглянути видалення проблемних клієнтів після багатьох невдач
-                            HandleClientFailure(clientId);
+                            OnNotificationFailed(clientId);
+                        }
+                        else
+                        {
+                            // Успішна доставка скидає лічильник послідовних невдач (M1).
+                            _consecutiveFailures.TryRemove(clientId, out _);
                         }
                     },
                     TaskScheduler.Default);
@@ -225,21 +269,39 @@ public abstract class AbstractEventProcessor(ILogger logger) : IEventProcessor, 
     }
 
     /// <summary>
-    /// Обробляє постійні невдачі клієнта при відправці сповіщень.
+    /// Обробляє одну невдачу доставки сповіщення клієнту: інкрементує лічильник послідовних
+    /// невдач, викликає хук <see cref="HandleClientFailure"/> і, після досягнення порогу
+    /// <c>maxConsecutiveNotificationFailures</c>, автоматично відписує клієнта (M1).
+    /// </summary>
+    /// <param name="clientId">Ідентифікатор клієнта.</param>
+    private void OnNotificationFailed(Guid clientId)
+    {
+        int failures = _consecutiveFailures.AddOrUpdate(clientId, 1, (_, current) => current + 1);
+
+        // Зберігаємо хук для кастомної логіки похідних класів (зворотна сумісність).
+        HandleClientFailure(clientId);
+
+        if (failures >= _maxConsecutiveNotificationFailures)
+        {
+            // Вбудований запобіжник: «зламаний» клієнт не отримуватиме нескінченний потік
+            // failed-сповіщень. UnregisterClient ідемпотентний і сам прибере лічильник.
+            AbstractEventProcessorLog.ClientAutoUnregistered(Logger, clientId, failures);
+            UnregisterClient(clientId);
+        }
+    }
+
+    /// <summary>
+    /// Хук для кастомної обробки невдач доставки клієнту.
     /// </summary>
     /// <param name="clientId">Ідентифікатор клієнта.</param>
     /// <remarks>
-    /// Порожня реалізація за замовчуванням, яка може бути перевизначена в похідних класах
-    /// для реалізації спеціальної логіки обробки невдач (наприклад, відключення клієнта
-    /// після певної кількості помилок).
-    /// 
-    /// Типові стратегії:
-    /// - Підрахунок послідовних невдач і відключення після порогу
-    /// - Експоненційне відтермінування повторних спроб
-    /// - Тимчасове призупинення сповіщень для проблемного клієнта
+    /// Порожня реалізація за замовчуванням. Базовий клас уже веде вбудований лічильник послідовних
+    /// невдач і авто-відписує клієнта після <c>maxConsecutiveNotificationFailures</c> (M1) — цей хук
+    /// для ДОДАТКОВОЇ логіки (метрики, експоненційне відтермінування, тимчасове призупинення тощо),
+    /// а не заміна авто-відписки. Викликається на КОЖНУ невдачу, перед перевіркою порогу.
     /// </remarks>
     protected virtual void HandleClientFailure(Guid clientId)
     {
-        // Реалізація може відстежувати кількість невдач і видаляти клієнтів, які часто зазнають невдачі
+        // Реалізація може відстежувати власні метрики; базова авто-відписка вже працює.
     }
 }

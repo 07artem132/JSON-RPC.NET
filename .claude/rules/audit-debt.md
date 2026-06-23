@@ -19,7 +19,13 @@ findings (M6 warnings, M7 README org refs) are **shipped**. Still open:
 | ✅ | M5 | `JsonRpcServerConfig` has no `[Range]`/`[Required]` validation → shipped `composition-and-config` (1.3.0) | `config-validation` |
 | ✅ | M8 | No CI build/test workflow → shipped: `.github/workflows/build.yml` (audit gate + tests) | `ci-bootstrap` |
 | ✅ | M9 | `WebSocketMessageHandler.CanRead/CanWrite` hardcoded `true` → shipped `security-hardening` (1.2.0) | (folded into H2) |
-| 🟢 | L1-L7 | overwrite-without-warning, non-concurrent list, `new` vs `override`, misleading async sig, etc. | polish |
+| ✅ | M1 | Fire-and-forget notification failures lost; broken client never removed → shipped `low-severity-polish` (2.2.0) | `event-processor-resilience` |
+| ✅ | L1-L7 | overwrite-without-warning, non-concurrent list, `new` vs `override`, misleading async sig, sealed exception → shipped `low-severity-polish` (2.2.0); L5/L7 already resolved | polish |
+
+**Only the registry AOT source-gen discovery alternative remains open** (rule #4 / H3 follow-up): the
+reflection scan in `AbstractRpcServiceRegistry` is not AOT-compatible (IL2026/IL3050). Closing it needs a
+source-generator-based discovery path (and likely a small public-API addition) before
+`<IsAotCompatible>true</IsAotCompatible>` can be set. Everything else in `AUDIT-FINDINGS.md` is shipped.
 
 **Rule for new PRs:** if your change touches the code behind an open finding, fix the finding (and add
 its guard test) in the same change rather than building new code on top of the debt.

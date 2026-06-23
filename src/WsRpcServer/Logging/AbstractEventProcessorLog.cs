@@ -29,4 +29,12 @@ internal static partial class AbstractEventProcessorLog
     [LoggerMessage(EventId = 1405, Level = LogLevel.Error,
         Message = "Помилка постановки сповіщення {Method} у чергу для клієнта {ClientId}")]
     public static partial void EnqueueNotificationError(ILogger logger, Exception ex, string method, Guid clientId);
+
+    [LoggerMessage(EventId = 1406, Level = LogLevel.Warning,
+        Message = "Клієнт {ClientId} вже зареєстрований — перезаписую обробник сповіщень")]
+    public static partial void ClientAlreadyRegistered(ILogger logger, Guid clientId);
+
+    [LoggerMessage(EventId = 1407, Level = LogLevel.Warning,
+        Message = "Клієнт {ClientId} автоматично відписаний після {Failures} послідовних невдач доставки сповіщень")]
+    public static partial void ClientAutoUnregistered(ILogger logger, Guid clientId, int failures);
 }
