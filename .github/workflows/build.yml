@@ -1,0 +1,74 @@
+name: CI
+
+# Audit-enforcing CI для JSON-RPC.NET (фінансова M8 + закриває «розбитий» badge з M7).
+# Тримає планку якості автоматично:
+#   1) NuGet vulnerability audit (NU1903 тощо) — нова транзитивна вразливість (як колись
+#      MessagePack) валить build, а не лишається непоміченою.
+#   2) Build з TreatWarningsAsErrors на lib + tests — 0 warnings.
+#   3) Повний unit-suite + збір покриття.
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Install .NET 10 SDK
+        uses: actions/setup-dotnet@c2fa09f4bde5ebb9d1777cf28262a3eb3db3ced7 # v5.2.0
+        with:
+          dotnet-version: 10.0.x
+
+      # Окремий restore з УВІМКНЕНИМ аудитом (за замовчуванням). Не передаємо
+      # -p:NuGetAudit=false — у цьому репо немає приватного feed-у, тож аудит доступний.
+      - name: Restore
+        run: dotnet restore JSON-RPC.NET.sln
+
+      # Явний gate вразливостей: `dotnet list --vulnerable` сам по собі завжди exit 0,
+      # тож грепаємо вивід і валимо build, якщо знайдено вразливі пакети (включно з examples,
+      # де TreatWarningsAsErrors вимкнено й NU1903 був би лише warning).
+      - name: NuGet vulnerability audit gate
+        run: |
+          set -euo pipefail
+          dotnet list JSON-RPC.NET.sln package --vulnerable --include-transitive 2>&1 | tee audit.txt
+          if grep -q "has the following vulnerable packages" audit.txt; then
+            echo "::error::Знайдено вразливі NuGet-пакети — див. лог вище."
+            exit 1
+          fi
+
+      # Build з TreatWarningsAsErrors (lib + tests) — будь-який warning = fail.
+      - name: Build (Release, warnings-as-errors)
+        run: dotnet build JSON-RPC.NET.sln -c Release --no-restore
+
+      - name: Test (Release) + coverage
+        run: >
+          dotnet test tests/WsRpcServer.Tests/WsRpcServer.Tests.csproj
+          -c Release --no-build
+          --logger "trx;LogFileName=test-results.trx"
+          --collect:"XPlat Code Coverage"
+          --results-directory ${{ github.workspace }}/TestResults
+
+      - name: Upload test results + coverage
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: test-results
+          path: ${{ github.workspace }}/TestResults/**
+          if-no-files-found: ignore

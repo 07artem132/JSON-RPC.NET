@@ -12,7 +12,8 @@
 
 - **`foundation-cluster-1` (1.1.0):** M6 (warnings → 0), M7 (README org refs).
 - **`security-hardening` (1.2.0):** ✅ **H2** (parse-failure throttle), ✅ **H3** (registry thread-safety + multi-impl warning), ✅ **H4** (cancel-before-dispose), ✅ **M9** (CanRead/CanWrite on dispose), plus the transitive **MessagePack** advisory (GHSA-hv8m-jj95-wg3x) pinned out. Each HIGH finding has a regression-guard test; build now passes with the NuGet audit **enabled**. Unit suite 83 → 90.
-- **Still open:** H1 (composition root), M1–M5, M8 (CI), L1–L7. See the table below.
+- **`ci-bootstrap`:** ✅ **M8** (`.github/workflows/build.yml` — NuGet vulnerability-audit gate + warnings-as-errors build + 90-test suite on push/PR) and the **M7** broken build badge (→ `build.yml`).
+- **Still open:** H1 (composition root), M1–M5, L1–L7. See the table below.
 
 ---
 
@@ -231,7 +232,7 @@ public interface ISubscriptionManager<TEventType, TArgs>
 
 ---
 
-### M7. README — broken org references, non-existent CI badges
+### M7. README — broken org references, non-existent CI badges  ✅ SHIPPED (org refs: `foundation-cluster-1`; build badge → `build.yml`: `ci-bootstrap`)
 
 **Where:** `README.md:7` (build status badge) + `:60` (NuGet feed).
 
@@ -244,7 +245,7 @@ public interface ISubscriptionManager<TEventType, TArgs>
 
 ---
 
-### M8. No CI/CD — `.github/workflows/` повністю відсутній
+### M8. No CI/CD — `.github/workflows/` повністю відсутній  ✅ SHIPPED (`ci-bootstrap`: `build.yml` — audit gate + warnings-as-errors + tests)
 
 **Where:** `git ls-files .github/` — empty.
 

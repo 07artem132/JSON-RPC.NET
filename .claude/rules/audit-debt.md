@@ -12,13 +12,13 @@ findings (M6 warnings, M7 README org refs) are **shipped**. Still open:
 | Sev | ID | One-liner | Suggested capability |
 |---|---|---|---|
 | 🔴 | H1 | `AddJsonRpcCore` registers only config; consumer hand-wires 5 services; no idempotency guard | `composition-root-complete` |
-| 🔴 | H2 | Unbounded malformed-JSON recovery loop = single-connection CPU-burn DoS | `parse-failure-throttle` |
-| 🔴 | H3 | Reflection registry: AOT-incompatible + thread-unsafe lazy cache + silent multi-impl loss | `service-registry-thread-safety` |
-| 🔴 | H4 | `Dispose()` doesn't cancel CTS first → orphaned in-flight tasks, `ObjectDisposedException` | `dispose-async-pattern` |
+| ✅ | H2 | Unbounded malformed-JSON recovery loop = single-connection CPU-burn DoS → shipped `security-hardening` (1.2.0) | `parse-failure-throttle` |
+| ✅ | H3 | Reflection registry thread-unsafe lazy cache + silent multi-impl loss → shipped `security-hardening` (1.2.0); AOT still open | `service-registry-thread-safety` |
+| ✅ | H4 | `Dispose()` doesn't cancel CTS first → shipped `security-hardening` (1.2.0) | `dispose-cancellation` |
 | 🟡 | M2/M3/M4 | Subscription base: unused lock; `account` leaks domain; `object` event types lose type-safety | `subscription-manager-cleanup` |
 | 🟡 | M5 | `JsonRpcServerConfig` has no `[Range]`/`[Required]` validation | `config-validation` |
-| 🟡 | M8 | No CI build/test workflow (only publish-on-release) | `ci-bootstrap` |
-| 🟡 | M9 | `WebSocketMessageHandler.CanRead/CanWrite` hardcoded `true`, survive Dispose | (fold into H2/H4) |
+| ✅ | M8 | No CI build/test workflow → shipped: `.github/workflows/build.yml` (audit gate + tests) | `ci-bootstrap` |
+| ✅ | M9 | `WebSocketMessageHandler.CanRead/CanWrite` hardcoded `true` → shipped `security-hardening` (1.2.0) | (folded into H2) |
 | 🟢 | L1-L7 | overwrite-without-warning, non-concurrent list, `new` vs `override`, misleading async sig, etc. | polish |
 
 **Rule for new PRs:** if your change touches the code behind an open finding, fix the finding (and add

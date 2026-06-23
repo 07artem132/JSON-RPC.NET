@@ -107,7 +107,8 @@ This repo is mid-maturation. The current floor, established by `foundation-clust
 
 - `foundation-cluster-1` (**1.1.0**) — build hygiene: `readme-org-fix`, `directory-build-props`, `warnings-cleanup` (439→0), `treat-warnings-errors`. See `openspec/changes/foundation-cluster-1/`.
 - `security-hardening` (**1.2.0**) — the 4 critical items: `dependency-vuln-messagepack` (MessagePack advisory), `parse-failure-throttle` (H2 + M9), `dispose-cancellation` (H4), `service-registry-thread-safety` (H3). Each guarded by a test; build passes with NuGet audit on; suite 83 → 90. See `openspec/changes/security-hardening/`.
-- **Backlog** (from `AUDIT-FINDINGS.md`, ordered low-risk first): `config-validation` (M5) → `composition-root-complete` (H1) → `subscription-manager-cleanup` (M2/M3/M4) → `ci-bootstrap` (M8) → `logger-message-migration` → registry AOT source-gen alternative.
+- `ci-bootstrap` — `.github/workflows/build.yml` (`CI`): NuGet vulnerability-audit gate + warnings-as-errors build + the 90-test suite on push/PR. Closes M8 + the broken README build badge (M7). No version bump (CI is not shippable).
+- **Backlog** (from `AUDIT-FINDINGS.md`, ordered low-risk first): `config-validation` (M5) → `composition-root-complete` (H1) → `subscription-manager-cleanup` (M2/M3/M4) → `logger-message-migration` → registry AOT source-gen alternative.
 
 ## Git
 
