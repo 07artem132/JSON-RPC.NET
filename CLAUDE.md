@@ -19,7 +19,7 @@ It is a **framework of abstract base classes** — consumers subclass `AbstractJ
 `AbstractSubscriptionStore`, `AbstractRpcServiceRegistry` and register RPC services via
 `[IRpcService]` discovery. The primary downstream consumer is **SignalCliNet.WsRpcServer**.
 
-- Target framework: **net9.0**. Package version lives in `Directory.Build.props`
+- Target framework: **net10.0**. Package version lives in `Directory.Build.props`
   (`<WsRpcServerPackageVersion>`, currently **1.1.0**) — never hardcode `<Version>` in a csproj.
 - Five layers: Transport (WebSocket) → Protocol (JSON-RPC 2.0) → Session → Service → Subscription.
 

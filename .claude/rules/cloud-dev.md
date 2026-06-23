@@ -6,7 +6,7 @@ paths:
 # Cloud development (Claude Code on the web)
 
 A `SessionStart` hook (`.claude/hooks/session-start.sh`, wired via `.claude/settings.json`) prepares
-remote sessions: it installs `dotnet-sdk-9.0` (the lib + tests target net9.0), warms the NuGet cache by
+remote sessions: it installs `dotnet-sdk-10.0` (the lib + tests target net10.0), warms the NuGet cache by
 restoring `tests/WsRpcServer.Tests`, and does a sanity build of `src/WsRpcServer`. It runs **only** when
 `CLAUDE_CODE_REMOTE=true`, so local workflows are untouched, and it's idempotent.
 

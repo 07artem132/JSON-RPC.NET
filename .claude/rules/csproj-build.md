@@ -27,9 +27,8 @@ paths:
   justification.
 - **GitHub Actions: SHA-pin every `uses:` and copy SHAs from existing workflows in this repo**
   (`.github/workflows/publish-nuget.yml`), not from memory or docs. A 1-char typo in an action SHA
-  fast-fails with "Unable to resolve action". The publish workflow installs the **net10 SDK** to build
-  the net9.0 target — that's fine (newer SDK builds older TFMs); keep the package version flowing from
-  `Directory.Build.props`.
+  fast-fails with "Unable to resolve action". The publish workflow installs the **net10 SDK** and the
+  lib/tests target **net10.0**; keep the package version flowing from `Directory.Build.props`.
 - There is **no CI build/test workflow yet** (only `publish-nuget.yml` on release) — that's open audit
   finding **M8** (`ci-bootstrap`). When adding it, prefer fast static checks over heavyweight
   consumer-build simulations.

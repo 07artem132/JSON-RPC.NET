@@ -4,8 +4,8 @@
 # Що робить:
 #   1) Лише у віддаленому середовищі (CLAUDE_CODE_REMOTE=true) — інакше виходить тихо,
 #      щоб не заважати локальній розробці.
-#   2) Ставить .NET 9 SDK через apt (за наявності — пропускає). Бібліотека таргетить
-#      net9.0; тести теж.
+#   2) Ставить .NET 10 SDK через apt (за наявності — пропускає). Бібліотека таргетить
+#      net10.0; тести теж.
 #   3) Виконує `dotnet restore` для тестового проєкту (тягне і референсований
 #      src/WsRpcServer). Прогріває NuGet-кеш — усі залежності з nuget.org,
 #      приватного feed-у тут НЕМАЄ, тож restore не потребує токена.
@@ -29,16 +29,16 @@ cd "$REPO_DIR"
 
 echo "[session-start] Готую середовище для JSON-RPC.NET у $REPO_DIR"
 
-# 1) .NET 9 SDK (бібліотека таргетить net9.0).
+# 1) .NET 10 SDK (бібліотека таргетить net10.0).
 if ! command -v dotnet >/dev/null 2>&1; then
-    echo "[session-start] Встановлюю dotnet-sdk-9.0 (apt)..."
+    echo "[session-start] Встановлюю dotnet-sdk-10.0 (apt)..."
     SUDO_PREFIX=""
     if [ "$(id -u)" != "0" ] && command -v sudo >/dev/null 2>&1; then
         SUDO_PREFIX="sudo"
     fi
     $SUDO_PREFIX apt-get update -qq || true
     $SUDO_PREFIX env DEBIAN_FRONTEND=noninteractive \
-        apt-get install -y --no-install-recommends dotnet-sdk-9.0
+        apt-get install -y --no-install-recommends dotnet-sdk-10.0
 else
     echo "[session-start] dotnet уже встановлено: $(dotnet --version)"
 fi

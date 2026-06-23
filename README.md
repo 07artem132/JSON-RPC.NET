@@ -3,7 +3,7 @@
 
 ![Lines](.github/badges/lines.svg) ![Methods](.github/badges/methods.svg) ![Branches](.github/badges/branches.svg)
 
-[![Ліцензія: MIT](https://img.shields.io/badge/Ліцензія-MIT-green.svg)](LICENSE) [![.NET](https://img.shields.io/badge/.NET-9.0-512BD4)](https://dotnet.microsoft.com/download/dotnet/9.0)
+[![Ліцензія: MIT](https://img.shields.io/badge/Ліцензія-MIT-green.svg)](LICENSE) [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/download/dotnet/10.0)
 [![Статус збірки](https://github.com/07artem132/JSON-RPC.NET/actions/workflows/dotnet-desktop.yml/badge.svg)](https://github.com/07artem132/JSON-RPC.NET/actions/workflows/dotnet-desktop.yml)
 
 🔥 **WsRpcServer** — високопродуктивний WebSocket-фреймворк для двобічних JSON-RPC сервісів. Абстрагує все, окрім бізнес-логіки.
@@ -50,7 +50,7 @@
 
 ## 🔧 Вимоги
 
-- **.NET 9.0** або новіше — [Завантажити](https://dotnet.microsoft.com/download/dotnet/9.0)
+- **.NET 10.0** або новіше — [Завантажити](https://dotnet.microsoft.com/download/dotnet/10.0)
 
 ## 📦 Встановлення
 > Публікація ведеться через [організацію 07artem132](https://github.com/07artem132)
