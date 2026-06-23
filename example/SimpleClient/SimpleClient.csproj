@@ -6,15 +6,16 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.3" />
-      <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.3" />
-      <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.3" />
-      <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="9.0.3" />
-      <PackageReference Include="Spectre.Console" Version="0.49.1" />
-      <PackageReference Include="StreamJsonRpc" Version="2.21.69" />
+      <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.9" />
+      <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.9" />
+      <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.9" />
+      <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.9" />
+      <PackageReference Include="Spectre.Console" Version="0.57.0" />
+      <PackageReference Include="StreamJsonRpc" Version="2.25.29" />
       <!-- Закриваємо транзитивну вразливість StreamJsonRpc → MessagePack 2.5.192 (GHSA-hv8m-jj95-wg3x). -->
       <PackageReference Include="MessagePack" Version="2.5.302" />
-      <PackageReference Include="Terminal.Gui" Version="1.18.0" />
+      <!-- Terminal.Gui тримаємо на лінії 1.x: 2.x — несумісне переписування API. -->
+      <PackageReference Include="Terminal.Gui" Version="1.19.0" />
     </ItemGroup>
 
 </Project>

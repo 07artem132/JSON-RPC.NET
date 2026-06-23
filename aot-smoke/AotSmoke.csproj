@@ -19,8 +19,8 @@
     <!-- Генератор як analyzer: через ProjectReference аналізатори транзитивно НЕ течуть, тож вмикаємо явно. -->
     <ProjectReference Include="..\src\WsRpcServer.SourceGenerator\WsRpcServer.SourceGenerator.csproj"
                       OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.3" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.3" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.9" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.9" />
   </ItemGroup>
 
 </Project>
