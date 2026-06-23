@@ -175,6 +175,19 @@ public abstract class AbstractSubscriptionManager(ILogger logger, int maxSubscri
 
         if (disposing)
         {
+            // H4: дренуємо семафор перед звільненням — чекаємо, поки поточний тримач відпустить
+            // OperationLock, і лише тоді звільняємо. Інакше in-flight Release() кидає
+            // ObjectDisposedException. Acquire без подальшого Release: ми володіємо локом до самого
+            // Dispose, тож нові тримачі не з'являться у вікні між дренажем і звільненням.
+            try
+            {
+                OperationLock.Wait(TimeSpan.FromSeconds(5));
+            }
+            catch (ObjectDisposedException)
+            {
+                // Повторний Dispose — ідемпотентність.
+            }
+
             OperationLock.Dispose();
         }
 

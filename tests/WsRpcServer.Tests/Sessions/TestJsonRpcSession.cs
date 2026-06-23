@@ -51,6 +51,25 @@
             public Channel<RpcNotification> NotificationChannelAccessor => NotificationChannel;
             public ILogger LoggerAccessor => Logger;
             public JsonRpcServerConfig ConfigAccessor => Config;
+            public Task? NotificationProcessingTaskAccessor => NotificationProcessingTask;
+
+            // H4 guard: імітує "вічну" фонову задачу обробки сповіщень, яка завершується лише
+            // при скасуванні Cts.Token. Дозволяє перевірити, що Dispose спершу скасовує токен і
+            // дренує задачу, а не лишає її "сиротою".
+            public void BeginNeverEndingProcessingTask()
+            {
+                NotificationProcessingTask = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await Task.Delay(Timeout.Infinite, Cts.Token);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // Очікуване завершення при скасуванні.
+                    }
+                });
+            }
 
             // Метод для запуска обработки уведомлений с нашей собственной реализацией
             public Task StartCustomProcessing(CancellationToken cancellationToken)
@@ -343,6 +362,23 @@
                         (Exception?)null,
                         It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                     Times.Once);
+            }
+
+            [Fact]
+            public void Dispose_DuringInFlightProcessingTask_CancelsAndDrainsWithoutThrow()
+            {
+                // Arrange — імітуємо активну фонову задачу обробки сповіщень (H4).
+                _session.BeginNeverEndingProcessingTask();
+                var processingTask = _session.NotificationProcessingTaskAccessor;
+                Assert.NotNull(processingTask);
+
+                // Act — Dispose має скасувати токен і дренувати задачу, не кидаючи виняток.
+                var exception = Record.Exception(() => _session.Dispose());
+
+                // Assert
+                Assert.Null(exception);
+                Assert.True(_session.CtsAccessor.IsCancellationRequested);
+                Assert.True(processingTask!.IsCompleted); // задачу дренували перед Cts.Dispose()
             }
 
             [Fact]

@@ -403,6 +403,28 @@ namespace WsRpcServer.Tests.Subscriptions
         }
 
         [Fact]
+        public async Task Dispose_WhileLockHeld_DrainsBeforeDisposingWithoutThrow()
+        {
+            // Arrange — зовнішній тримач захоплює OperationLock (імітує in-flight операцію).
+            await _manager.OperationLockAccessor.WaitAsync();
+
+            // Act — Dispose у фоні: має блокуватись на дренажі семафора, поки тримач не відпустить (H4).
+            var disposeTask = Task.Run(() => _manager.Dispose());
+
+            // Поки лок утримується, Dispose НЕ може завершитися (детерміновано: Wait блокується).
+            var finished = await Task.WhenAny(disposeTask, Task.Delay(200));
+            Assert.NotSame(disposeTask, finished);
+            Assert.False(_manager.IsDisposedAccessor);
+
+            // Відпускаємо лок — Dispose дренує й завершується без винятку.
+            _manager.OperationLockAccessor.Release();
+            await disposeTask.WaitAsync(TimeSpan.FromSeconds(5));
+
+            // Assert
+            Assert.True(_manager.IsDisposedAccessor);
+        }
+
+        [Fact]
         public void Dispose_CalledMultipleTimes_DisposesOnlyOnce()
         {
             // Arrange

@@ -307,6 +307,21 @@ namespace WsRpcServer.Tests.Events
         }
 
         [Fact]
+        public void Dispose_WithoutStopAsync_CancelsCtsBeforeDisposing()
+        {
+            // Arrange — НЕ викликаємо StopAsync (імітуємо утилізацію через DI-контейнер).
+            Assert.False(_eventProcessor.CtsAccessor.IsCancellationRequested);
+
+            // Act
+            _eventProcessor.Dispose();
+
+            // Assert — H4: Dispose сам скасовує токен, щоб фонові задачі похідних класів не лишались
+            // "сиротами". IsCancellationRequested читається безпечно навіть після Dispose CTS.
+            Assert.True(_eventProcessor.CtsAccessor.IsCancellationRequested);
+            Assert.True(_eventProcessor.IsDisposedAccessor);
+        }
+
+        [Fact]
         public void Dispose_CalledMultipleTimes_OnlyDisposesOnce()
         {
             // Arrange

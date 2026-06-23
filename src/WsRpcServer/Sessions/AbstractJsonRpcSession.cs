@@ -319,8 +319,33 @@ public abstract class AbstractJsonRpcSession(
     {
         if (disposingManagedResources)
         {
-            Cts.Dispose();
+            // H4: спершу сигналізуємо скасування, потім завершуємо канал і дренуємо фонову задачу,
+            // і лише після цього звільняємо Cts. Якщо звільнити Cts до скасування — фонова задача
+            // лишається "сиротою", а linked-токени всередині неї кидають ObjectDisposedException.
+            try
+            {
+                Cts.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Повторний Dispose — ідемпотентність.
+            }
+
             NotificationChannel.Writer.TryComplete();
+
+            // Найкраще-зусилля: дочекатися завершення обробки сповіщень. Обмежуємо за часом, бо
+            // WsSession.Dispose синхронний (NetCoreServer керує життєвим циклом) — після скасування
+            // задача завершується майже миттєво; таймаут лише страхує від теоретичного зависання.
+            try
+            {
+                NotificationProcessingTask?.Wait(TimeSpan.FromSeconds(5));
+            }
+            catch (Exception ex) when (ex is OperationCanceledException or AggregateException or ObjectDisposedException)
+            {
+                // Скасування очікуване; будь-які помилки самої задачі вже залоговані у циклі обробки.
+            }
+
+            Cts.Dispose();
         }
 
         base.Dispose(disposingManagedResources);

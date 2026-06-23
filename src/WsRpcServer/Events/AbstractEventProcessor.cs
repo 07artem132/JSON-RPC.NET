@@ -153,6 +153,18 @@ public abstract class AbstractEventProcessor(ILogger logger) : IEventProcessor, 
 
         if (disposing)
         {
+            // H4: скасовуємо токен ПЕРЕД звільненням, навіть якщо StopAsync не викликали (напр.
+            // утилізація через DI-контейнер) — інакше фонові задачі похідних класів лишаються
+            // "сиротами" з captured-токеном, який зараз буде звільнено.
+            try
+            {
+                Cts.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Повторний Dispose — ідемпотентність.
+            }
+
             Cts.Dispose();
 
             foreach (var subscription in Subscriptions)

@@ -11,10 +11,10 @@
 - [x] 2.4 Guard test: N malformed frames → session closed with `ProtocolError`; one good frame resets the counter. (`WebSocketMessageHandlerParseThrottleTests`; existing recovery test updated Error→Warning.)
 
 ## 3. dispose-cancellation (H4)
-- [ ] 3.1 `AbstractJsonRpcSession.Dispose`: `Cts.Cancel()` → complete channel → bounded drain of `NotificationProcessingTask` → `Cts.Dispose()`; idempotent.
-- [ ] 3.2 `AbstractEventProcessor.Dispose(bool)`: `Cts.Cancel()` before `Cts.Dispose()`.
-- [ ] 3.3 `AbstractSubscriptionManager.Dispose(bool)`: best-effort drain `OperationLock` before dispose.
-- [ ] 3.4 Guard test: dispose during in-flight notification cancels + drains without `ObjectDisposedException`.
+- [x] 3.1 `AbstractJsonRpcSession.Dispose`: `Cts.Cancel()` → complete channel → bounded drain of `NotificationProcessingTask` → `Cts.Dispose()`; idempotent.
+- [x] 3.2 `AbstractEventProcessor.Dispose(bool)`: `Cts.Cancel()` before `Cts.Dispose()`.
+- [x] 3.3 `AbstractSubscriptionManager.Dispose(bool)`: best-effort drain `OperationLock` before dispose.
+- [x] 3.4 Guard tests: session drains in-flight task; event-processor cancels CTS without StopAsync; subscription-manager drains held lock before dispose.
 
 ## 4. service-registry-thread-safety (H3)
 - [ ] 4.1 Replace `??=` lazy cache with thread-safe init (double-checked `Lock` + volatile).
