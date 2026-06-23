@@ -79,4 +79,17 @@ public record JsonRpcServerConfig
     /// що запобігає витоку ресурсів при проблемних клієнтах.
     /// </remarks>
     public TimeSpan NotificationTimeout { get; set; } = TimeSpan.FromSeconds(5);
+
+    /// <summary>
+    /// Максимальна кількість послідовних помилок розбору JSON, після якої з'єднання примусово закривається.
+    /// За замовчуванням 10.
+    /// </summary>
+    /// <remarks>
+    /// Захист від DoS-вектора: зловмисник може надсилати потік невалідного JSON, змушуючи сервер
+    /// нескінченно виконувати цикл відновлення (rent буфера + лінійний скан) і насичувати CPU на одному
+    /// з'єднанні. Після цієї кількості послідовних невдалих розборів з'єднання закривається зі статусом
+    /// <see cref="System.Net.WebSockets.WebSocketCloseStatus.ProtocolError"/>. Лічильник скидається після
+    /// кожного успішного розбору повідомлення.
+    /// </remarks>
+    public int MaxConsecutiveParseFailures { get; set; } = 10;
 }

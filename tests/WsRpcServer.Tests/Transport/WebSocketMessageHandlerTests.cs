@@ -217,10 +217,12 @@ namespace WsRpcServer.Tests.Transport
             Assert.NotNull(firstResult);
             Assert.Null(secondResult); // The handler should return null when deserialization fails
             
-            // Verify error was logged with the correct position
+            // Verify the parse failure was logged at Warning with the correct position.
+            // (H2 / parse-failure-throttle: malformed-JSON is an expected client-side error class,
+            //  logged at Warning — not Error — so a flood doesn't spam the error channel.)
             _mockLogger.Verify(
                 l => l.Log(
-                    LogLevel.Error,
+                    LogLevel.Warning,
                     It.IsAny<EventId>(),
                     It.IsAny<It.IsAnyType>(),
                     It.Is<JsonException>(ex => ex.BytePositionInLine == errorPosition),

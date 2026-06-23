@@ -5,10 +5,10 @@
 - [x] 1.2 Verify `dotnet build` passes with audit ON (no `-p:NuGetAudit=false`); `dotnet list package --vulnerable` clean.
 
 ## 2. parse-failure-throttle (H2 + M9)
-- [ ] 2.1 Add `MaxConsecutiveParseFailures` (default 10) to `JsonRpcServerConfig`.
-- [ ] 2.2 `WebSocketMessageHandler`: count consecutive `JsonException`s; close `ProtocolError` + end read loop on limit; reset on success.
-- [ ] 2.3 `CanRead`/`CanWrite` → `!_disposed`.
-- [ ] 2.4 Guard test: N malformed frames → session closed with `ProtocolError`; one good frame resets the counter.
+- [x] 2.1 Add `MaxConsecutiveParseFailures` (default 10) to `JsonRpcServerConfig`.
+- [x] 2.2 `WebSocketMessageHandler`: count consecutive `JsonException`s; close `ProtocolError` + end read loop on limit; reset on success.
+- [x] 2.3 `CanRead`/`CanWrite` → `!_disposed`.
+- [x] 2.4 Guard test: N malformed frames → session closed with `ProtocolError`; one good frame resets the counter. (`WebSocketMessageHandlerParseThrottleTests`; existing recovery test updated Error→Warning.)
 
 ## 3. dispose-cancellation (H4)
 - [ ] 3.1 `AbstractJsonRpcSession.Dispose`: `Cts.Cancel()` → complete channel → bounded drain of `NotificationProcessingTask` → `Cts.Dispose()`; idempotent.

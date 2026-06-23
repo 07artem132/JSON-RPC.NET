@@ -26,6 +26,17 @@ public sealed class WebSocketMessageHandler : MessageHandlerBase, IJsonRpcMessag
     private IJsonRpcMessageBufferManager? _bufferedMessage;
     private bool _disposed;
 
+    /// <summary>
+    /// Лічильник послідовних помилок розбору JSON. Скидається після успішної десеріалізації;
+    /// при досягненні <see cref="JsonRpcServerConfig.MaxConsecutiveParseFailures"/> з'єднання закривається.
+    /// </summary>
+    private int _consecutiveParseFailures;
+
+    /// <summary>
+    /// Поріг послідовних помилок розбору, після якого з'єднання примусово закривається (H2 anti-DoS).
+    /// </summary>
+    private readonly int _maxConsecutiveParseFailures;
+
     public WebSocketMessageHandler(
         IJsonRpcSession session,
         IJsonRpcMessageFormatter formatter,
@@ -35,6 +46,7 @@ public sealed class WebSocketMessageHandler : MessageHandlerBase, IJsonRpcMessag
     {
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _maxConsecutiveParseFailures = config?.MaxConsecutiveParseFailures ?? 10;
 
         // Налаштовуємо канал з пороговим значенням
         var receivePipe = new Pipe(new PipeOptions(
@@ -47,9 +59,11 @@ public sealed class WebSocketMessageHandler : MessageHandlerBase, IJsonRpcMessag
             session.Id, config?.PipeThresholdBytes ?? 1024 * 1024);
     }
 
-    // Базові властивості, необхідні для StreamJsonRpc
-    public override bool CanRead => true;
-    public override bool CanWrite => true;
+    // Базові властивості, необхідні для StreamJsonRpc.
+    // Після утилізації повертаємо false, щоб StreamJsonRpc припинив викликати Read/Write
+    // у вже звільнений обробник (M9).
+    public override bool CanRead => !_disposed;
+    public override bool CanWrite => !_disposed;
 
     /// <summary>
     /// Обробляє отримані дані WebSocket, записуючи їх у канал.
@@ -117,6 +131,7 @@ public sealed class WebSocketMessageHandler : MessageHandlerBase, IJsonRpcMessag
             JsonRpcMessage? message = null;
             SequencePosition consumed = buffer.Start;
             SequencePosition examined = buffer.End;
+            bool parseLimitExceeded = false;
 
             try
             {
@@ -127,21 +142,31 @@ public sealed class WebSocketMessageHandler : MessageHandlerBase, IJsonRpcMessag
                 // Якщо повідомлення успішно десеріалізовано, все оброблено
                 consumed = buffer.End;
 
+                // Успішний розбір — скидаємо лічильник послідовних помилок (H2).
+                _consecutiveParseFailures = 0;
+
                 _logger.LogDebug("Успішно десеріалізовано повідомлення типу {MessageType} для сесії {SessionId}",
                     message.GetType().Name, _session.Id);
             }
             catch (JsonException jsonEx)
             {
-                _logger.LogError(jsonEx,
-                    "Помилка десеріалізації JSON-RPC повідомлення для сесії {SessionId}. Позиція: {Position}",
-                    _session.Id, jsonEx.BytePositionInLine);
+                _consecutiveParseFailures++;
 
-                // Розумніша стратегія відновлення - спробуємо просунутися до позиції помилки,
-                // щоб не втратити дані після неї
-                if (jsonEx.BytePositionInLine > 0)
+                // Логуємо на Warning (не Error) — це очікуваний клас помилок від клієнта, а не збій сервера.
+                _logger.LogWarning(jsonEx,
+                    "Помилка розбору JSON-RPC повідомлення для сесії {SessionId} (підряд {Count}/{Max}). Позиція: {Position}",
+                    _session.Id, _consecutiveParseFailures, _maxConsecutiveParseFailures, jsonEx.BytePositionInLine);
+
+                if (_consecutiveParseFailures >= _maxConsecutiveParseFailures)
+                {
+                    // Захист від CPU-burn DoS: припиняємо нескінченний цикл відновлення (H2).
+                    parseLimitExceeded = true;
+                    consumed = buffer.End;
+                }
+                else if (jsonEx.BytePositionInLine > 0)
                 {
                     int errorPos = Math.Max(0, (int)jsonEx.BytePositionInLine);
-                    // Шукаємо наступний роздільник JSON-об'єкту
+                    // Шукаємо наступний роздільник JSON-об'єкту, щоб не втратити дані після помилки.
                     consumed = FindNextJsonDelimiter(buffer, errorPos);
                 }
                 else
@@ -160,6 +185,17 @@ public sealed class WebSocketMessageHandler : MessageHandlerBase, IJsonRpcMessag
             finally
             {
                 _reader.AdvanceTo(consumed, examined);
+            }
+
+            if (parseLimitExceeded)
+            {
+                _logger.LogWarning(
+                    "Перевищено ліміт послідовних помилок розбору ({Max}) для сесії {SessionId} — закриваю з'єднання",
+                    _maxConsecutiveParseFailures, _session.Id);
+
+                _session.Close(WebSocketCloseStatus.ProtocolError, "Too many consecutive malformed JSON messages");
+                await _reader.CompleteAsync().ConfigureAwait(false);
+                return null;
             }
 
             return message;
