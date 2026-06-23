@@ -9,9 +9,14 @@ paths:
 
 - **`Directory.Build.props` is shared canon** — auto-imported by every csproj. It holds
   `AnalysisLevel=latest-recommended`, `EnforceCodeStyleInBuild=true`, `Nullable=enable`,
-  `ImplicitUsings=enable`, the deferred `NoWarn=CA1848;CA1873` (LoggerMessage migration is a separate
-  future capability), and `<WsRpcServerPackageVersion>` — the **single source of truth** for the
-  package version.
+  `ImplicitUsings=enable`, and `<WsRpcServerPackageVersion>` — the **single source of truth** for the
+  package version. The repo-wide `NoWarn=CA1848;CA1873` is **gone** — `logger-message-migration` (2.1.0)
+  moved all `src/WsRpcServer` logging onto source-generated `[LoggerMessage]` partials
+  (`src/WsRpcServer/Logging/*Log.cs`), so both perf rules are now active there. They stay suppressed only
+  in the **test** csproj (test doubles log ad-hoc) and the **example** projects
+  (`example/Directory.Build.props`, idiomatic consumer demos) — the same test-only/demo-only carve-out as
+  `CA1707`. Note: `example/Directory.Build.props` must explicitly `<Import>` the root props (MSBuild only
+  auto-imports the *nearest* `Directory.Build.props`).
 - **Version goes through `$(WsRpcServerPackageVersion)`, never hardcoded.**
   `WsRpcServer.csproj` uses `<Version>$(WsRpcServerPackageVersion)</Version>` +
   `<AssemblyVersion>` + `<FileVersion>`. A hardcoded `<Version>X.Y.Z</Version>` is the exact drift

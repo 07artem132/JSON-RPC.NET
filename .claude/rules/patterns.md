@@ -79,6 +79,23 @@ business logic. Every pattern below exists to keep that extension seam safe and 
   infinite failed notifications. Use `TryAdd` (not indexer-overwrite) when registering a client and log
   a Warning on duplicate registration.
 
+## Logging (source-generated)
+
+- ✅ Shipped in `logger-message-migration` (2.1.0). All `ILogger` logging in `src/WsRpcServer` goes
+  through source-generated `[LoggerMessage]` partial methods, one `internal static partial class
+  <Type>Log` per logging type under `src/WsRpcServer/Logging/` — the SignalCli.NET convention.
+- **EventId blocks are reserved per type** (don't collide; `LoggerMessageMigrationTests` enforces
+  uniqueness): `AbstractJsonRpcServer` 1000–1099, `AbstractJsonRpcSession` 1100–1199,
+  `WebSocketMessageHandler` 1200–1299, `AbstractRpcServiceRegistry` 1300–1399,
+  `AbstractEventProcessor` 1400–1499. A new logging type gets the next free block.
+- **Add a log line by adding a `[LoggerMessage]` method**, not an inline `Logger.LogX("…", …)` — `CA1848`/
+  `CA1873` are active in the lib and a direct call fails the build (and `LoggerMessageMigrationTests`).
+  Call sites read `<Type>Log.MethodName(Logger, …)`; the `Exception` argument (if any) goes immediately
+  after `ILogger logger`. Preserve message text + level + structured property names verbatim when editing.
+- **Mocking gotcha (tests):** the generated methods guard with `logger.IsEnabled(level)` first; a default
+  `Mock<ILogger>` returns `false` from `IsEnabled`, so a verify-on-`Log` test silently sees zero calls.
+  Set `mock.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true)` after creating the mock.
+
 ## Configuration (audit finding M5)
 
 - ✅ M5 shipped (`composition-and-config`, 1.3.0): `JsonRpcServerConfig` carries `[Range]`/`[Required]`

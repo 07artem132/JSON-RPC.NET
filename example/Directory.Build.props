@@ -1,0 +1,22 @@
+<Project>
+
+  <!--
+    Спочатку підтягуємо кореневий Directory.Build.props (спільний canon: AnalysisLevel,
+    Nullable, $(WsRpcServerPackageVersion) тощо), бо MSBuild імпортує лише НАЙБЛИЖЧИЙ
+    Directory.Build.props — без явного імпорту кореневий не застосувався б до example/*.
+  -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <PropertyGroup>
+    <!--
+      Демо-проєкти навмисно «ліниві» (consumer-facing зразки) — вони показують
+      ІДІОМАТИЧНЕ споживацьке логування через простий `_logger.LogInformation(...)`,
+      яке і має бачити користувач бібліотеки. Перформанс-правило source-generated
+      логування (CA1848/CA1873) стосується гарячих шляхів самої бібліотеки
+      (`logger-message-migration`, 2.1.0), а не навчальних прикладів — тож тут воно
+      придушене. У `src/WsRpcServer` обидва правила активні.
+    -->
+    <NoWarn>$(NoWarn);CA1848;CA1873</NoWarn>
+  </PropertyGroup>
+
+</Project>

@@ -155,6 +155,9 @@
             {
                 _server = new TestWsServer();
                 _loggerMock = new Mock<ILogger>();
+                // [LoggerMessage]-генеровані методи перевіряють IsEnabled перед Log — за замовчуванням
+                // Mock<ILogger>.IsEnabled повертає false, тож без цього Log ніколи б не викликався.
+                _loggerMock.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
                 _config = new JsonRpcServerConfig
                 {
                     NotificationQueueSize = 10,

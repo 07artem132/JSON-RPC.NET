@@ -5,6 +5,7 @@ using NetCoreServer;
 using StreamJsonRpc;
 using WsRpcServer.Core;
 using WsRpcServer.Events;
+using WsRpcServer.Logging;
 
 namespace WsRpcServer.Sessions;
 
@@ -112,19 +113,18 @@ public abstract class AbstractJsonRpcSession(
     {
         if (IsDisposed || Cts.IsCancellationRequested)
         {
-            Logger.LogDebug("Пропуск сповіщення {Method} для закритої сесії {ClientId}", method, Id);
+            AbstractJsonRpcSessionLog.NotificationSkippedClosedSession(Logger, method, Id);
             return Task.CompletedTask;
         }
 
         // Використовуємо TryWrite, щоб уникнути блокування, якщо канал заповнений
         if (!NotificationChannel.Writer.TryWrite(new RpcNotification(method, args)))
         {
-            Logger.LogWarning("Канал сповіщень заповнений, пропуск сповіщення: {Method} для клієнта {ClientId}", method,
-                Id);
+            AbstractJsonRpcSessionLog.NotificationChannelFull(Logger, method, Id);
         }
         else
         {
-            Logger.LogDebug("Додано сповіщення {Method} до черги для клієнта {ClientId}", method, Id);
+            AbstractJsonRpcSessionLog.NotificationQueued(Logger, method, Id);
         }
 
         return Task.CompletedTask;
@@ -154,7 +154,7 @@ public abstract class AbstractJsonRpcSession(
     /// </remarks>
     protected async Task ProcessNotificationsAsync(CancellationToken cancellationToken)
     {
-        Logger.LogDebug("Запущено обробку сповіщень для клієнта {ClientId}", Id);
+        AbstractJsonRpcSessionLog.NotificationProcessingStarted(Logger, Id);
 
         try
         {
@@ -162,9 +162,7 @@ public abstract class AbstractJsonRpcSession(
             {
                 if (JsonRpc == null)
                 {
-                    Logger.LogWarning(
-                        "JSON-RPC відсутній, неможливо надіслати сповіщення {Method} для клієнта {ClientId}",
-                        notification.Method, Id);
+                    AbstractJsonRpcSessionLog.NotificationNoJsonRpc(Logger, notification.Method, Id);
                     break;
                 }
 
@@ -178,24 +176,22 @@ public abstract class AbstractJsonRpcSession(
                     await JsonRpc.NotifyAsync(notification.Method, notification.Arguments)
                         .WaitAsync(timeoutCts.Token);
 
-                    Logger.LogDebug("Надіслано сповіщення {Method} клієнту {ClientId}",
-                        notification.Method, Id);
+                    AbstractJsonRpcSessionLog.NotificationSent(Logger, notification.Method, Id);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
                     // Сесія завершується, виходимо з методу
-                    Logger.LogDebug("Обробку сповіщень скасовано для клієнта {ClientId}", Id);
+                    AbstractJsonRpcSessionLog.NotificationProcessingCanceled(Logger, Id);
                     break;
                 }
                 catch (Exception ex)
                 {
-                    Logger.LogError(ex, "Помилка надсилання сповіщення {Method} клієнту {ClientId}",
-                        notification.Method, Id);
+                    AbstractJsonRpcSessionLog.NotificationSendError(Logger, ex, notification.Method, Id);
 
                     // Якщо отримано занадто багато помилок, вважаємо з'єднання втраченим
                     if (ex is ConnectionLostException)
                     {
-                        Logger.LogWarning("З'єднання втрачено для клієнта {ClientId}, зупиняємо обробку сповіщень", Id);
+                        AbstractJsonRpcSessionLog.ConnectionLostStopping(Logger, Id);
                         break;
                     }
                 }
@@ -204,14 +200,14 @@ public abstract class AbstractJsonRpcSession(
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             // Нормальне скасування, логуємо на рівні відлагодження
-            Logger.LogDebug("Обробку сповіщень скасовано для клієнта {ClientId}", Id);
+            AbstractJsonRpcSessionLog.NotificationProcessingCanceled(Logger, Id);
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Помилка в циклі обробки сповіщень для клієнта {ClientId}", Id);
+            AbstractJsonRpcSessionLog.NotificationLoopError(Logger, ex, Id);
         }
 
-        Logger.LogDebug("Завершено обробку сповіщень для клієнта {ClientId}", Id);
+        AbstractJsonRpcSessionLog.NotificationProcessingFinished(Logger, Id);
     }
 
     /// <summary>
@@ -230,15 +226,14 @@ public abstract class AbstractJsonRpcSession(
     {
         try
         {
-            Logger.LogInformation("Закриття WebSocket з'єднання: {Status} - {Reason} для клієнта {ClientId}",
-                status, reason, Id);
+            AbstractJsonRpcSessionLog.ClosingConnection(Logger, status, reason, Id);
 
             // Використовуємо NetCoreServer API для закриття з'єднання з правильним статусом
             Close((int)status, reason);
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Помилка закриття WebSocket з'єднання для клієнта {ClientId}", Id);
+            AbstractJsonRpcSessionLog.CloseError(Logger, ex, Id);
         }
     }
 
@@ -258,22 +253,20 @@ public abstract class AbstractJsonRpcSession(
     {
         if (IsDisposed)
         {
-            Logger.LogWarning("Спроба надіслати бінарні дані після утилізації сесії {ClientId}", Id);
+            AbstractJsonRpcSessionLog.BinarySendAfterDispose(Logger, Id);
             return Task.CompletedTask;
         }
 
         try
         {
-            Logger.LogDebug("Надсилання бінарних даних розміром {Size} байтів для клієнта {ClientId}",
-                data.Length, Id);
+            AbstractJsonRpcSessionLog.SendingBinaryData(Logger, data.Length, Id);
 
             // Використовуємо вбудований метод NetCoreServer для надсилання бінарних даних
             SendBinaryAsync(data.Span);
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Помилка надсилання бінарних даних розміром {Size} байтів для клієнта {ClientId}",
-                data.Length, Id);
+            AbstractJsonRpcSessionLog.BinarySendError(Logger, ex, data.Length, Id);
         }
 
         return Task.CompletedTask;
@@ -297,7 +290,7 @@ public abstract class AbstractJsonRpcSession(
     /// </remarks>
     public new void OnWsPing(byte[] buffer, long offset, long size)
     {
-        Logger.LogDebug("Отримано WebSocket ping для клієнта {ClientId}", Id);
+        AbstractJsonRpcSessionLog.PingReceived(Logger, Id);
 
         // Дозволяємо NetCoreServer автоматично надіслати pong відповідь
         base.OnWsPing(buffer, offset, size);

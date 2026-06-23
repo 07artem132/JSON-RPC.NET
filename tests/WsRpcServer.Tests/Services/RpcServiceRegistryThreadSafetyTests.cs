@@ -68,6 +68,9 @@ namespace WsRpcServer.Tests.Services
         {
             // Arrange — збірка містить дві реалізації IMultiImplRpc.
             var logger = new Mock<ILogger>();
+            // [LoggerMessage]-генеровані методи перевіряють IsEnabled перед Log — за замовчуванням
+            // Mock<ILogger>.IsEnabled повертає false, тож без цього Warning ніколи б не викликався.
+            logger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
             var registry = new CountingRpcServiceRegistry(
                 Mock.Of<IServiceProvider>(),
                 logger.Object,

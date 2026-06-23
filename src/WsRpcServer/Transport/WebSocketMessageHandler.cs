@@ -7,6 +7,7 @@ using StreamJsonRpc;
 using StreamJsonRpc.Protocol;
 using StreamJsonRpc.Reflection;
 using WsRpcServer.Core;
+using WsRpcServer.Logging;
 using WsRpcServer.Sessions;
 
 namespace WsRpcServer.Transport;
@@ -55,8 +56,7 @@ public sealed class WebSocketMessageHandler : MessageHandlerBase, IJsonRpcMessag
         _reader = receivePipe.Reader;
         _writer = receivePipe.Writer;
 
-        _logger.LogDebug("Створено WebSocketMessageHandler для сесії {SessionId} з порогом {Threshold} байт",
-            session.Id, config?.PipeThresholdBytes ?? 1024 * 1024);
+        WebSocketMessageHandlerLog.HandlerCreated(_logger, session.Id, config?.PipeThresholdBytes ?? 1024 * 1024);
     }
 
     // Базові властивості, необхідні для StreamJsonRpc.
@@ -73,8 +73,7 @@ public sealed class WebSocketMessageHandler : MessageHandlerBase, IJsonRpcMessag
     {
         try
         {
-            _logger.LogDebug("Обробка отриманих даних розміром {Size} байт для сесії {SessionId}",
-                buffer.Length, _session.Id);
+            WebSocketMessageHandlerLog.ProcessingReceivedData(_logger, buffer.Length, _session.Id);
 
             // Записуємо вхідні дані в канал
             _writer.Write(buffer.Span);
@@ -84,7 +83,7 @@ public sealed class WebSocketMessageHandler : MessageHandlerBase, IJsonRpcMessag
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Помилка обробки даних WebSocket для сесії {SessionId}", _session.Id);
+            WebSocketMessageHandlerLog.ProcessDataError(_logger, ex, _session.Id);
             throw;
         }
     }
@@ -101,14 +100,14 @@ public sealed class WebSocketMessageHandler : MessageHandlerBase, IJsonRpcMessag
         {
             if (message is not null && _bufferedMessage == message)
             {
-                _logger.LogDebug("Завершено десеріалізацію повідомлення для сесії {SessionId}", _session.Id);
+                WebSocketMessageHandlerLog.DeserializationComplete(_logger, _session.Id);
                 _bufferedMessage.DeserializationComplete(message);
                 _bufferedMessage = null;
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Помилка завершення десеріалізації повідомлення для сесії {SessionId}", _session.Id);
+            WebSocketMessageHandlerLog.DeserializationCompleteError(_logger, ex, _session.Id);
         }
     }
 
@@ -124,7 +123,7 @@ public sealed class WebSocketMessageHandler : MessageHandlerBase, IJsonRpcMessag
 
             if (readResult.IsCanceled || (buffer.IsEmpty && readResult.IsCompleted))
             {
-                _logger.LogDebug("Читання скасовано або завершено для сесії {SessionId}", _session.Id);
+                WebSocketMessageHandlerLog.ReadCanceledOrCompleted(_logger, _session.Id);
                 return null;
             }
 
@@ -135,7 +134,7 @@ public sealed class WebSocketMessageHandler : MessageHandlerBase, IJsonRpcMessag
 
             try
             {
-                _logger.LogDebug("Спроба десеріалізації JSON-RPC повідомлення для сесії {SessionId}", _session.Id);
+                WebSocketMessageHandlerLog.AttemptingDeserialize(_logger, _session.Id);
                 message = Formatter.Deserialize(buffer);
                 _bufferedMessage = message as IJsonRpcMessageBufferManager;
 
@@ -145,17 +144,15 @@ public sealed class WebSocketMessageHandler : MessageHandlerBase, IJsonRpcMessag
                 // Успішний розбір — скидаємо лічильник послідовних помилок (H2).
                 _consecutiveParseFailures = 0;
 
-                _logger.LogDebug("Успішно десеріалізовано повідомлення типу {MessageType} для сесії {SessionId}",
-                    message.GetType().Name, _session.Id);
+                WebSocketMessageHandlerLog.DeserializeOk(_logger, message.GetType().Name, _session.Id);
             }
             catch (JsonException jsonEx)
             {
                 _consecutiveParseFailures++;
 
                 // Логуємо на Warning (не Error) — це очікуваний клас помилок від клієнта, а не збій сервера.
-                _logger.LogWarning(jsonEx,
-                    "Помилка розбору JSON-RPC повідомлення для сесії {SessionId} (підряд {Count}/{Max}). Позиція: {Position}",
-                    _session.Id, _consecutiveParseFailures, _maxConsecutiveParseFailures, jsonEx.BytePositionInLine);
+                WebSocketMessageHandlerLog.ParseError(_logger, jsonEx, _session.Id, _consecutiveParseFailures,
+                    _maxConsecutiveParseFailures, jsonEx.BytePositionInLine);
 
                 if (_consecutiveParseFailures >= _maxConsecutiveParseFailures)
                 {
@@ -177,8 +174,7 @@ public sealed class WebSocketMessageHandler : MessageHandlerBase, IJsonRpcMessag
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Неочікувана помилка під час десеріалізації повідомлення для сесії {SessionId}",
-                    _session.Id);
+                WebSocketMessageHandlerLog.UnexpectedDeserializeError(_logger, ex, _session.Id);
                 consumed = buffer.End;
                 throw;
             }
@@ -189,9 +185,7 @@ public sealed class WebSocketMessageHandler : MessageHandlerBase, IJsonRpcMessag
 
             if (parseLimitExceeded)
             {
-                _logger.LogWarning(
-                    "Перевищено ліміт послідовних помилок розбору ({Max}) для сесії {SessionId} — закриваю з'єднання",
-                    _maxConsecutiveParseFailures, _session.Id);
+                WebSocketMessageHandlerLog.ParseLimitExceeded(_logger, _maxConsecutiveParseFailures, _session.Id);
 
                 _session.Close(WebSocketCloseStatus.ProtocolError, "Too many consecutive malformed JSON messages");
                 await _reader.CompleteAsync().ConfigureAwait(false);
@@ -202,12 +196,12 @@ public sealed class WebSocketMessageHandler : MessageHandlerBase, IJsonRpcMessag
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            _logger.LogDebug("Операцію читання скасовано для сесії {SessionId}", _session.Id);
+            WebSocketMessageHandlerLog.ReadCanceled(_logger, _session.Id);
             return null;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Неочікувана помилка читання даних WebSocket для сесії {SessionId}", _session.Id);
+            WebSocketMessageHandlerLog.ReadError(_logger, ex, _session.Id);
             throw;
         }
     }
@@ -254,15 +248,14 @@ public sealed class WebSocketMessageHandler : MessageHandlerBase, IJsonRpcMessag
     {
         if (_disposed)
         {
-            _logger.LogWarning("Спроба запису в утилізований WebSocketMessageHandler для сесії {SessionId}",
-                _session.Id);
+            WebSocketMessageHandlerLog.WriteAfterDispose(_logger, _session.Id);
             throw new ObjectDisposedException(nameof(WebSocketMessageHandler));
         }
 
         await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            _logger.LogDebug("Серіалізація та надсилання JSON-RPC повідомлення для сесії {SessionId}", _session.Id);
+            WebSocketMessageHandlerLog.SerializingMessage(_logger, _session.Id);
 
             // Використовуємо ArrayBufferWriter для ефективної серіалізації
             var writer = new ArrayBufferWriter<byte>(1024);
@@ -278,12 +271,11 @@ public sealed class WebSocketMessageHandler : MessageHandlerBase, IJsonRpcMessag
             // Використовуємо NetCoreServer для надсилання бінарних даних
             await _session.SendBinaryDataAsync(writer.WrittenMemory);
 
-            _logger.LogDebug("Надіслано JSON-RPC повідомлення розміром {Size} байт для сесії {SessionId}",
-                writer.WrittenCount, _session.Id);
+            WebSocketMessageHandlerLog.MessageSent(_logger, writer.WrittenCount, _session.Id);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Помилка надсилання JSON-RPC повідомлення для сесії {SessionId}", _session.Id);
+            WebSocketMessageHandlerLog.SendMessageError(_logger, ex, _session.Id);
             throw;
         }
         finally
@@ -300,7 +292,7 @@ public sealed class WebSocketMessageHandler : MessageHandlerBase, IJsonRpcMessag
         {
             if (disposing)
             {
-                _logger.LogDebug("Утилізація WebSocketMessageHandler для сесії {SessionId}", _session.Id);
+                WebSocketMessageHandlerLog.Disposing(_logger, _session.Id);
                 _writeLock.Dispose();
                 _writer.Complete();
                 _reader.Complete();

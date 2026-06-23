@@ -38,6 +38,9 @@ namespace WsRpcServer.Tests.Transport
 
             _mockFormatter = new Mock<IJsonRpcMessageFormatter>();
             _mockLogger = new Mock<ILogger<WebSocketMessageHandler>>();
+            // [LoggerMessage]-генеровані методи перевіряють IsEnabled перед Log — за замовчуванням
+            // Mock<ILogger>.IsEnabled повертає false, тож без цього Log ніколи б не викликався.
+            _mockLogger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
             _config = new JsonRpcServerConfig
             {
                 PipeThresholdBytes = 1024 * 1024

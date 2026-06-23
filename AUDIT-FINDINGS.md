@@ -15,6 +15,7 @@
 - **`ci-bootstrap`:** ✅ **M8** (`.github/workflows/build.yml` — NuGet vulnerability-audit gate + warnings-as-errors build + 90-test suite on push/PR) and the **M7** broken build badge (→ `build.yml`).
 - **`composition-and-config` (1.3.0):** ✅ **H1** (full composition root — generic `AddJsonRpcCore<…>` registers all 5 services + concrete server + idempotency marker) and ✅ **M5** (`JsonRpcServerConfig` DataAnnotations + source-gen `[OptionsValidator]` fail-fast validation). Each guarded by a test; suite 90 → 112.
 - **`subscription-manager-cleanup` (2.0.0, BREAKING):** ✅ **M2** (base now uses `OperationLock` via template `*Core` methods), ✅ **M3** (`account` → `topic`), ✅ **M4** (`ISubscriptionManager<TEventType, TEventArgs>` generic, no `object`). Guarded by 2 new tests; suite 112 → 114.
+- **`logger-message-migration` (2.1.0):** closed the deferred `CA1848;CA1873` suppression left over from `warnings-cleanup` — all ~51 `ILogger` call sites in `src/WsRpcServer` moved onto source-generated `[LoggerMessage]` partials (5 new `Logging/*Log.cs`, EventId block per type). Repo-wide `<NoWarn>` removed; both perf rules now active in the lib (suppressed only in test/example projects). Guarded by `LoggerMessageMigrationTests`; suite 114 → 116.
 - **Still open:** M1, L1–L7. See the table below.
 
 ---

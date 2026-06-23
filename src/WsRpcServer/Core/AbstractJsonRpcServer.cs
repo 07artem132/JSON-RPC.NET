@@ -6,6 +6,7 @@ using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using System.Net.Sockets;
+using WsRpcServer.Logging;
 
 /// <summary>
 /// Абстрактний базовий клас для JSON-RPC WebSocket серверів.
@@ -71,7 +72,7 @@ public abstract class AbstractJsonRpcServer(
     /// </remarks>
     protected override void OnError(SocketError error)
     {
-        _logger.LogError("Помилка WebSocket сервера: {Error}", error);
+        AbstractJsonRpcServerLog.ServerError(_logger, error);
         OnServerError(error);
     }
 

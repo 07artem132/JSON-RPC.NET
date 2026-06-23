@@ -15,16 +15,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
 
     <!--
-      Deferred analyzer suppressions per foundation-cluster-1 capability
-      `warnings-cleanup` spec:
-
-      CA1848 + CA1873 — "Use the LoggerMessage delegates" / "Perf rule".
-      Addressing вимагає migration усіх ~190 ILogger call sites на
-      source-generated `[LoggerMessage]` partial methods (the SignalCli.NET
-      pattern). 400+ occurrences combined; separate future capability
-      `logger-message-migration` буде окремий OpenSpec change.
+      CA1848 + CA1873 ("Use the LoggerMessage delegates" / "Perf rule") більше НЕ
+      придушені: `logger-message-migration` (2.1.0) перевів усі ILogger call sites у
+      `src/WsRpcServer` на source-generated `[LoggerMessage]` partial методи
+      (`src/WsRpcServer/Logging/*Log.cs`, the SignalCli.NET pattern). Тепер обидва
+      правила активні, тож будь-який новий ad-hoc `Logger.LogX("template", …)` ламає
+      build (TreatWarningsAsErrors). Не повертай blanket NoWarn — додай метод у *Log.cs.
     -->
-    <NoWarn>$(NoWarn);CA1848;CA1873</NoWarn>
 
     <!--
       Default: WARN. Per-csproj override → ERROR у `src/WsRpcServer.csproj`
@@ -39,7 +36,7 @@
       $(WsRpcServerPackageVersion); hardcoded <Version> there was 1.0.0.
       Bumping = одне місце.
     -->
-    <WsRpcServerPackageVersion>2.0.0</WsRpcServerPackageVersion>
+    <WsRpcServerPackageVersion>2.1.0</WsRpcServerPackageVersion>
   </PropertyGroup>
 
 </Project>

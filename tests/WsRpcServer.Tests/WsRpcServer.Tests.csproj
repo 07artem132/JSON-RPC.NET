@@ -8,8 +8,15 @@
           CA1707 — identifier names contain underscores. У test code це
           xUnit-стандартна convention (`Method_Scenario_ExpectedResult`)
           для descriptive failure messages. Per warnings-cleanup spec.
+
+          CA1848/CA1873 (LoggerMessage perf-rule) — scoped до test-проєкту:
+          `logger-message-migration` (2.1.0) перевів усю PRODUCTION-бібліотеку на
+          source-generated [LoggerMessage], але тестові дублери (TestJsonRpcSession,
+          TestEventProcessor тощо) логують ad-hoc — це не hot path і не вимагає
+          source-gen. Тримаємо perf-rule вимкненим тут так само, як CA1707 (test-only),
+          щоб не змушувати дублери проходити через генератор.
         -->
-        <NoWarn>$(NoWarn);CA1707</NoWarn>
+        <NoWarn>$(NoWarn);CA1707;CA1848;CA1873</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>

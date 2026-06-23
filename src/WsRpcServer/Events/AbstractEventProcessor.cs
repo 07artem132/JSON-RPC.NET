@@ -1,6 +1,7 @@
 ﻿using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using WsRpcServer.Core;
+using WsRpcServer.Logging;
 
 namespace WsRpcServer.Events;
 
@@ -70,7 +71,7 @@ public abstract class AbstractEventProcessor(ILogger logger) : IEventProcessor, 
     /// </remarks>
     public virtual Task StartAsync(CancellationToken cancellationToken)
     {
-        Logger.LogInformation("Запуск обробника подій");
+        AbstractEventProcessorLog.Starting(Logger);
         return Task.CompletedTask;
     }
 
@@ -87,7 +88,7 @@ public abstract class AbstractEventProcessor(ILogger logger) : IEventProcessor, 
     /// </remarks>
     public virtual Task StopAsync(CancellationToken cancellationToken)
     {
-        Logger.LogInformation("Зупинка обробника подій");
+        AbstractEventProcessorLog.Stopping(Logger);
         Cts.Cancel();
         return Task.CompletedTask;
     }
@@ -106,7 +107,7 @@ public abstract class AbstractEventProcessor(ILogger logger) : IEventProcessor, 
     {
         ClientHandlers[clientId] = notificationHandler ??
                                    throw new ArgumentNullException(nameof(notificationHandler));
-        Logger.LogInformation("Клієнт {ClientId} зареєстрований для отримання сповіщень про події", clientId);
+        AbstractEventProcessorLog.ClientRegistered(Logger, clientId);
     }
 
     /// <summary>
@@ -121,7 +122,7 @@ public abstract class AbstractEventProcessor(ILogger logger) : IEventProcessor, 
     {
         if (ClientHandlers.TryRemove(clientId, out _))
         {
-            Logger.LogInformation("Клієнт {ClientId} відписаний від сповіщень про події", clientId);
+            AbstractEventProcessorLog.ClientUnregistered(Logger, clientId);
         }
     }
 
@@ -209,9 +210,7 @@ public abstract class AbstractEventProcessor(ILogger logger) : IEventProcessor, 
                     {
                         if (t.IsFaulted)
                         {
-                            Logger.LogError(t.Exception,
-                                "Помилка відправки сповіщення {Method} клієнту {ClientId}",
-                                method, clientId);
+                            AbstractEventProcessorLog.NotifyClientError(Logger, t.Exception!, method, clientId);
 
                             // Розглянути видалення проблемних клієнтів після багатьох невдач
                             HandleClientFailure(clientId);
@@ -221,8 +220,7 @@ public abstract class AbstractEventProcessor(ILogger logger) : IEventProcessor, 
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Помилка постановки сповіщення {Method} у чергу для клієнта {ClientId}",
-                method, clientId);
+            AbstractEventProcessorLog.EnqueueNotificationError(Logger, ex, method, clientId);
         }
     }
 

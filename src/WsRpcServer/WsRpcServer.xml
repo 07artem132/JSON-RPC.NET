@@ -1048,6 +1048,36 @@
             реєстрацій (споживач може зареєструвати власну реалізацію до виклику цього методу).
             </remarks>
         </member>
+        <member name="T:WsRpcServer.Logging.AbstractEventProcessorLog">
+            <summary>
+            Source-generated логи для <see cref="T:WsRpcServer.Events.AbstractEventProcessor"/>.
+            EventId-блок 1400–1499.
+            </summary>
+        </member>
+        <member name="T:WsRpcServer.Logging.AbstractJsonRpcServerLog">
+            <summary>
+            Source-generated логи для <see cref="T:WsRpcServer.Core.AbstractJsonRpcServer"/>.
+            EventId-блок 1000–1099.
+            </summary>
+        </member>
+        <member name="T:WsRpcServer.Logging.AbstractJsonRpcSessionLog">
+            <summary>
+            Source-generated логи для <see cref="T:WsRpcServer.Sessions.AbstractJsonRpcSession"/>.
+            EventId-блок 1100–1199.
+            </summary>
+        </member>
+        <member name="T:WsRpcServer.Logging.AbstractRpcServiceRegistryLog">
+            <summary>
+            Source-generated логи для <see cref="T:WsRpcServer.Services.AbstractRpcServiceRegistry"/>.
+            EventId-блок 1300–1399.
+            </summary>
+        </member>
+        <member name="T:WsRpcServer.Logging.WebSocketMessageHandlerLog">
+            <summary>
+            Source-generated логи для <see cref="T:WsRpcServer.Transport.WebSocketMessageHandler"/>.
+            EventId-блок 1200–1299.
+            </summary>
+        </member>
         <member name="T:WsRpcServer.Services.AbstractRpcServiceRegistry">
             <summary>
             Абстрактний базовий клас для реєстрації RPC-сервісів.

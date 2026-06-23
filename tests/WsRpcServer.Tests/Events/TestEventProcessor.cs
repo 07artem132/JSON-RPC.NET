@@ -39,6 +39,9 @@ namespace WsRpcServer.Tests.Events
         public AbstractEventProcessorTests()
         {
             _loggerMock = new Mock<ILogger>();
+            // [LoggerMessage]-генеровані методи перевіряють IsEnabled перед Log — за замовчуванням
+            // Mock<ILogger>.IsEnabled повертає false, тож без цього Log ніколи б не викликався.
+            _loggerMock.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
             _eventProcessor = new TestEventProcessor(_loggerMock.Object);
         }
 

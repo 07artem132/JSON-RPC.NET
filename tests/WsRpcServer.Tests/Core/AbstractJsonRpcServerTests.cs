@@ -50,6 +50,9 @@ namespace WsRpcServer.Tests.Core
         {
             _mockServiceProvider = new Mock<IServiceProvider>();
             _mockLogger = new Mock<ILogger>();
+            // [LoggerMessage]-генеровані методи перевіряють IsEnabled перед Log — за замовчуванням
+            // Mock<ILogger>.IsEnabled повертає false, тож без цього Log ніколи б не викликався.
+            _mockLogger.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
         }
 
         [Fact]

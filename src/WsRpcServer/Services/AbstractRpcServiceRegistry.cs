@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
 using WsRpcServer.Core;
+using WsRpcServer.Logging;
 
 namespace WsRpcServer.Services;
 
@@ -105,7 +106,7 @@ public abstract class AbstractRpcServiceRegistry(
     {
         ArgumentNullException.ThrowIfNull(jsonRpc);
 
-        Logger.LogDebug("Реєстрація RPC-сервісів для клієнта {ClientId}", clientId);
+        AbstractRpcServiceRegistryLog.RegisteringServices(Logger, clientId);
 
         var cache = GetServiceTypeCache();
         int successCount = 0;
@@ -121,12 +122,12 @@ public abstract class AbstractRpcServiceRegistry(
                     jsonRpc.AddLocalRpcTarget(service, StandardOptions);
                     successCount++;
 
-                    Logger.LogDebug("Зареєстровано RPC-сервіс: {Type}", interfaceType.Name);
+                    AbstractRpcServiceRegistryLog.ServiceRegistered(Logger, interfaceType.Name);
                 }
             }
             catch (Exception ex)
             {
-                Logger.LogError(ex, "Помилка при реєстрації RPC-сервісу {Type}", interfaceType.Name);
+                AbstractRpcServiceRegistryLog.ServiceRegisterError(Logger, ex, interfaceType.Name);
             }
         }
 
@@ -141,17 +142,15 @@ public abstract class AbstractRpcServiceRegistry(
                 jsonRpc.AddLocalRpcTarget(service, StandardOptions);
                 successCount++;
 
-                Logger.LogDebug("Зареєстровано клієнт-специфічний RPC-сервіс: {Type}", implType.Name);
+                AbstractRpcServiceRegistryLog.ClientAwareServiceRegistered(Logger, implType.Name);
             }
             catch (Exception ex)
             {
-                Logger.LogError(ex, "Помилка при реєстрації клієнт-специфічного сервісу {Type}",
-                    implType.Name);
+                AbstractRpcServiceRegistryLog.ClientAwareServiceRegisterError(Logger, ex, implType.Name);
             }
         }
 
-        Logger.LogInformation("Зареєстровано {Count} RPC-сервісів для клієнта {ClientId}",
-            successCount, clientId);
+        AbstractRpcServiceRegistryLog.ServicesRegistered(Logger, successCount, clientId);
     }
 
     /// <summary>
@@ -262,9 +261,8 @@ public abstract class AbstractRpcServiceRegistry(
                 // а решту проігноровано (consumer має уточнити вибір через DI-реєстрацію).
                 if (matching.Count > 1)
                 {
-                    Logger.LogWarning(
-                        "Знайдено {Count} реалізацій інтерфейсу {Interface}; використано {Chosen}, решту проігноровано. Уточніть реєстрацію через DI.",
-                        matching.Count, interfaceType.Name, implType!.Name);
+                    AbstractRpcServiceRegistryLog.MultipleImplementations(Logger, matching.Count, interfaceType.Name,
+                        implType!.Name);
                 }
 
                 if (implType != null)
@@ -284,7 +282,7 @@ public abstract class AbstractRpcServiceRegistry(
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Помилка при скануванні типів RPC-сервісів");
+            AbstractRpcServiceRegistryLog.ScanError(Logger, ex);
         }
 
         return new ServiceTypeCache(regularServices, clientAwareServices);

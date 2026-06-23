@@ -20,7 +20,7 @@ It is a **framework of abstract base classes** — consumers subclass `AbstractJ
 `[IRpcService]` discovery. The primary downstream consumer is **SignalCliNet.WsRpcServer**.
 
 - Target framework: **net10.0**. Package version lives in `Directory.Build.props`
-  (`<WsRpcServerPackageVersion>`, currently **2.0.0**) — never hardcode `<Version>` in a csproj.
+  (`<WsRpcServerPackageVersion>`, currently **2.1.0**) — never hardcode `<Version>` in a csproj.
 - Five layers: Transport (WebSocket) → Protocol (JSON-RPC 2.0) → Session → Service → Subscription.
 
 ## Build & test
@@ -72,9 +72,12 @@ Path-scoped agent instructions live in `.claude/rules/` (load conditionally when
    Never reintroduce a hardcoded `<Version>X.Y.Z</Version>`.
 2. **Zero warnings = build failure.** `src/WsRpcServer` + `tests/WsRpcServer.Tests` opt into
    `TreatWarningsAsErrors`. Do not silence a real warning with a blanket `NoWarn`; fix it, or
-   suppress narrowly with a justification comment. `CA1848`/`CA1873` (LoggerMessage) are the only
-   repo-wide deferred suppressions — see `Directory.Build.props` and the `logger-message-migration`
-   future capability.
+   suppress narrowly with a justification comment. There are **no** repo-wide deferred suppressions left:
+   `CA1848`/`CA1873` (LoggerMessage) shipped in `logger-message-migration` (2.1.0) — all library logging
+   goes through source-generated `[LoggerMessage]` partials in `src/WsRpcServer/Logging/*Log.cs`, so a new
+   ad-hoc `Logger.LogX("template", …)` in `src/WsRpcServer` now fails the build. Those two perf rules are
+   suppressed **only** in the test csproj (ad-hoc test-double logging) and the example projects
+   (`example/Directory.Build.props`, idiomatic consumer demos) — the same carve-out as `CA1707`.
 3. **Disposal signals cancellation first.** Classes holding a `CancellationTokenSource` for
    background work (`AbstractJsonRpcSession`, `AbstractEventProcessor`) MUST `Cts.Cancel()` and
    drain the in-flight task **before** `Cts.Dispose()`; `AbstractSubscriptionManager` drains its
@@ -105,10 +108,17 @@ Path-scoped agent instructions live in `.claude/rules/` (load conditionally when
    (re-entrant `OperationLock` = deadlock). `GetClientsForEvent` stays lock-free (hot read path). ✅ Shipped
    in `subscription-manager-cleanup` (2.0.0), guarded by tests. (This is the breaking 2.0.0 wave.)
 9. **Comments and log messages are written in Ukrainian** — match the surrounding code when editing.
+10. **Library logging is source-generated.** Every `ILogger` call in `src/WsRpcServer` goes through a
+    `[LoggerMessage]` partial method in `src/WsRpcServer/Logging/<Type>Log.cs` (one `internal static
+    partial class` per type, EventId block reserved per type: server 1000s, session 1100s, transport
+    1200s, registry 1300s, event-processor 1400s). No direct `Logger.LogX("template", …)` — `CA1848`/
+    `CA1873` are active there. Add a new log line by adding a `[LoggerMessage]` method, not an inline call.
+    ✅ Shipped in `logger-message-migration` (2.1.0), guarded by `LoggerMessageMigrationTests`.
 
 > Rules 3-5 shipped in `security-hardening` (1.2.0); rules 6-7 in `composition-and-config` (1.3.0);
-> rule 8 in `subscription-manager-cleanup` (2.0.0) — each with a regression-guard test (see
-> `tests/WsRpcServer.Tests/{Transport,Sessions,Events,Subscriptions,Services,Core,Extensions}`).
+> rule 8 in `subscription-manager-cleanup` (2.0.0); rule 10 in `logger-message-migration` (2.1.0) — each
+> with a regression-guard test (see
+> `tests/WsRpcServer.Tests/{Transport,Sessions,Events,Subscriptions,Services,Core,Extensions,Logging}`).
 > When you fix a remaining finding, add its guard test and move its bullet to a shipped state.
 
 ## Maturity baseline (do not regress below this)
@@ -116,7 +126,7 @@ Path-scoped agent instructions live in `.claude/rules/` (load conditionally when
 This repo is mid-maturation. The current floor, established by `foundation-cluster-1` (→ 1.1.0):
 
 - **Build hygiene:** 0 warnings, `TreatWarningsAsErrors=true` on lib + tests; shared `Directory.Build.props`.
-- **Tests:** unit suite green (**114**). Adding a feature that touches an open audit finding SHOULD add the matching regression-guard test (see `.claude/rules/audit-debt.md`).
+- **Tests:** unit suite green (**116**). Adding a feature that touches an open audit finding SHOULD add the matching regression-guard test (see `.claude/rules/audit-debt.md`).
 - **Process:** non-trivial work goes through OpenSpec (`openspec/changes/<name>/`); `AUDIT-FINDINGS.md` is the prioritized backlog (4 HIGH / 9 MEDIUM / 7 LOW).
 
 ## Implemented / planned
@@ -126,7 +136,8 @@ This repo is mid-maturation. The current floor, established by `foundation-clust
 - `ci-bootstrap` — `.github/workflows/build.yml` (`CI`): NuGet vulnerability-audit gate + warnings-as-errors build + the 90-test suite on push/PR. Closes M8 + the broken README build badge (M7). No version bump (CI is not shippable).
 - `composition-and-config` (**1.3.0**) — `config-validation` (M5: `JsonRpcServerConfig` DataAnnotations + source-gen `[OptionsValidator]` fail-fast) + `composition-root-complete` (H1: generic `AddJsonRpcCore<…>` registers all 5 services + concrete server + idempotency marker; consumer boilerplate removed from `example/SimpleServer/Program.cs`). Each guarded by a test; suite 90 → 112. See `openspec/changes/composition-and-config/`.
 - `subscription-manager-cleanup` (**2.0.0**, BREAKING) — M2/M3/M4: `ISubscriptionManager` → generic `ISubscriptionManager<TEventType, TEventArgs>` (no `object`), `account` → `topic`, and `AbstractSubscriptionManager<…>` now serializes mutations through `OperationLock` (template methods over abstract `*Core`; M2). Generic `AddJsonRpcCore<…>` gains `TEventType, TEventArgs` (7 params). Suite 112 → 114. See `openspec/changes/subscription-manager-cleanup/`.
-- **Backlog** (from `AUDIT-FINDINGS.md`): `logger-message-migration` (CA1848/CA1873, ~190 sites) → registry AOT source-gen alternative → LOW-severity polish (L1-L7).
+- `logger-message-migration` (**2.1.0**) — moved all ~51 `ILogger` call sites in `src/WsRpcServer` onto source-generated `[LoggerMessage]` partials (5 new `Logging/*Log.cs`, EventId block per type), removed the repo-wide `CA1848;CA1873` `<NoWarn>` (now active in the lib; suppressed only in test/example projects), added the `LoggerMessageMigrationTests` guard. Suite 114 → 116. See `openspec/changes/logger-message-migration/`.
+- **Backlog** (from `AUDIT-FINDINGS.md`): registry AOT source-gen discovery alternative (rule #4) → LOW-severity polish (L1-L7).
 
 ## Git
 
