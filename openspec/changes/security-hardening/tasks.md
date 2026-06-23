@@ -17,9 +17,9 @@
 - [x] 3.4 Guard tests: session drains in-flight task; event-processor cancels CTS without StopAsync; subscription-manager drains held lock before dispose.
 
 ## 4. service-registry-thread-safety (H3)
-- [ ] 4.1 Replace `??=` lazy cache with thread-safe init (double-checked `Lock` + volatile).
-- [ ] 4.2 Log Warning when >1 implementation found for one interface.
-- [ ] 4.3 Guard test: `Parallel.For` first-use builds the cache exactly once.
+- [x] 4.1 Replace `??=` lazy cache with thread-safe init (double-checked `Lock` + volatile).
+- [x] 4.2 Log Warning when >1 implementation found for one interface.
+- [x] 4.3 Guard tests: `Parallel.For` first-use builds the cache exactly once; multi-impl logs Warning.
 
 ## 5. Close-out
 - [ ] 5.1 Bump `<WsRpcServerPackageVersion>` 1.1.0 → 1.2.0.

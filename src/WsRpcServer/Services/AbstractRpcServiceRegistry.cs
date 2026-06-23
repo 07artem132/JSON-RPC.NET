@@ -55,20 +55,35 @@ public abstract class AbstractRpcServiceRegistry(
     /// Кеш типів сервісів, отриманих через рефлексію.
     /// Заповнюється при першому виклику GetServiceTypeCache.
     /// </summary>
-    private ServiceTypeCache? _serviceTypeCache;
+    /// <remarks>
+    /// <c>volatile</c> разом із двократно-перевіреним блокуванням на <see cref="_cacheLock"/>
+    /// гарантує, що кеш будується рівно один раз навіть при конкурентному першому використанні
+    /// (RegisterServices викликається для кожного нового клієнта, тож старти кількох з'єднань
+    /// одночасно інакше гонилися б і будували кеш двічі — H3).
+    /// </remarks>
+    private volatile ServiceTypeCache? _serviceTypeCache;
 
     /// <summary>
-    /// Отримує кеш типів сервісів, створюючи його при першому виклику.
+    /// Блокування для потокобезпечної одноразової побудови <see cref="_serviceTypeCache"/>.
+    /// </summary>
+    private readonly Lock _cacheLock = new();
+
+    /// <summary>
+    /// Отримує кеш типів сервісів, створюючи його при першому виклику (потокобезпечно, рівно раз).
     /// </summary>
     /// <returns>Кеш типів сервісів.</returns>
-    /// <remarks>
-    /// Використовує ледачу ініціалізацію (lazy initialization) для створення кешу
-    /// лише при необхідності, що дозволяє уникнути сканування збірок до першого використання.
-    /// </remarks>
-    private ServiceTypeCache GetServiceTypeCache()
+    protected ServiceTypeCache GetServiceTypeCache()
     {
-        _serviceTypeCache ??= BuildServiceTypeCache();
-        return _serviceTypeCache;
+        var cache = _serviceTypeCache;
+        if (cache is not null)
+        {
+            return cache;
+        }
+
+        lock (_cacheLock)
+        {
+            return _serviceTypeCache ??= BuildServiceTypeCache();
+        }
     }
 
     /// <summary>
@@ -240,7 +255,17 @@ public abstract class AbstractRpcServiceRegistry(
             // Розподіляємо сервіси за категоріями
             foreach (var interfaceType in serviceInterfaces)
             {
-                var implType = implementations.FirstOrDefault(t => interfaceType.IsAssignableFrom(t));
+                var matching = implementations.Where(t => interfaceType.IsAssignableFrom(t)).ToList();
+                var implType = matching.FirstOrDefault();
+
+                // H3: не «глитаємо» множинні реалізації мовчки — попереджаємо, що використано одну,
+                // а решту проігноровано (consumer має уточнити вибір через DI-реєстрацію).
+                if (matching.Count > 1)
+                {
+                    Logger.LogWarning(
+                        "Знайдено {Count} реалізацій інтерфейсу {Interface}; використано {Chosen}, решту проігноровано. Уточніть реєстрацію через DI.",
+                        matching.Count, interfaceType.Name, implType!.Name);
+                }
 
                 if (implType != null)
                 {
