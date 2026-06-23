@@ -1,120 +1,92 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using WsRpcServer.Subscriptions;
 
 namespace SimpleServer;
 
-    public class DemoSubscriptionManager(
-        ILogger<DemoSubscriptionManager> logger,
-        DemoEventProcessor eventProcessor)
-        : AbstractSubscriptionManager(logger, 10)
+public class DemoSubscriptionManager(
+    ILogger<DemoSubscriptionManager> logger,
+    DemoEventProcessor eventProcessor)
+    : AbstractSubscriptionManager<ServerEventType, object>(logger, 10)
+{
+    private readonly Dictionary<Guid, HashSet<ServerEventType>> _clientSubscriptions = new();
+    private readonly DemoEventProcessor _eventProcessor = eventProcessor ?? throw new ArgumentNullException(nameof(eventProcessor));
+
+    // Виконується під OperationLock (база серіалізує мутації) — реалізуємо лише бізнес-логіку.
+    protected override Task<int> SubscribeCore(
+        Guid clientId,
+        string topic,
+        IReadOnlyCollection<ServerEventType> eventTypes,
+        CancellationToken cancellationToken)
     {
-        private readonly Dictionary<Guid, HashSet<ServerEventType>> _clientSubscriptions = new();
-        private readonly DemoEventProcessor _eventProcessor = eventProcessor ?? throw new ArgumentNullException(nameof(eventProcessor));
+        Logger.LogInformation("Client {ClientId} subscribing to {EventTypes} on topic {Topic}",
+            clientId, eventTypes, topic);
 
-        // Implementation of Subscribe method
-        public override Task<int> Subscribe(
-            Guid clientId,
-            string account,
-            object eventTypes,
-            CancellationToken cancellationToken = default)
+        if (!_clientSubscriptions.TryGetValue(clientId, out var events))
         {
-            Logger.LogInformation("Client {ClientId} subscribing to {EventTypes}", 
-                clientId, eventTypes);
-
-            var subscriptionId = 0;
-
-            if (eventTypes is ServerEventType eventType)
-            {
-                // Subscribe to a single event type
-                if (!_clientSubscriptions.TryGetValue(clientId, out var events))
-                {
-                    events = new HashSet<ServerEventType>();
-                    _clientSubscriptions[clientId] = events;
-                }
-
-                events.Add(eventType);
-                subscriptionId = (int)eventType;
-            }
-            else if (eventTypes is ServerEventType[] eventTypesArray)
-            {
-                // Subscribe to multiple event types
-                if (!_clientSubscriptions.TryGetValue(clientId, out var events))
-                {
-                    events = new HashSet<ServerEventType>();
-                    _clientSubscriptions[clientId] = events;
-                }
-
-                foreach (var type in eventTypesArray)
-                {
-                    events.Add(type);
-                }
-                
-                subscriptionId = 999; // Special ID for "all events"
-            }
-
-            return Task.FromResult(subscriptionId);
+            events = new HashSet<ServerEventType>();
+            _clientSubscriptions[clientId] = events;
         }
 
-        // Implementation of Unsubscribe method
-        public override Task<bool> Unsubscribe(
-            Guid clientId,
-            int subscriptionId,
-            CancellationToken cancellationToken = default)
+        foreach (var type in eventTypes)
         {
-            Logger.LogInformation("Client {ClientId} unsubscribing from {SubscriptionId}", 
-                clientId, subscriptionId);
+            events.Add(type);
+        }
 
-            if (!_clientSubscriptions.TryGetValue(clientId, out var events))
-            {
-                return Task.FromResult(false);
-            }
+        // Спеціальний ідентифікатор "усі підписані типи" для цього простого демо.
+        return Task.FromResult(999);
+    }
 
-            if (subscriptionId == 999)
+    protected override Task<bool> UnsubscribeCore(
+        Guid clientId,
+        int subscriptionId,
+        CancellationToken cancellationToken)
+    {
+        Logger.LogInformation("Client {ClientId} unsubscribing from {SubscriptionId}",
+            clientId, subscriptionId);
+
+        if (!_clientSubscriptions.TryGetValue(clientId, out var events))
+        {
+            return Task.FromResult(false);
+        }
+
+        if (subscriptionId == 999)
+        {
+            _clientSubscriptions.Remove(clientId);
+        }
+        else if (Enum.IsDefined(typeof(ServerEventType), subscriptionId))
+        {
+            events.Remove((ServerEventType)subscriptionId);
+
+            if (events.Count == 0)
             {
-                // Unsubscribe from all events
                 _clientSubscriptions.Remove(clientId);
             }
-            else if (Enum.IsDefined(typeof(ServerEventType), subscriptionId))
-            {
-                // Unsubscribe from a specific event type
-                events.Remove((ServerEventType)subscriptionId);
-                
-                if (events.Count == 0)
-                {
-                    _clientSubscriptions.Remove(clientId);
-                }
-            }
-            else
-            {
-                return Task.FromResult(false);
-            }
-
-            return Task.FromResult(true);
         }
-
-        // Implementation of UpdateSubscription method
-        public override Task<bool> UpdateSubscription(
-            Guid clientId,
-            int subscriptionId,
-            object eventTypes,
-            CancellationToken cancellationToken = default)
+        else
         {
-            // For our simple demo, this is just the same as subscribing
-            _ = Subscribe(clientId, "", eventTypes, cancellationToken);
-            return Task.FromResult(true);
+            return Task.FromResult(false);
         }
 
-        // Implementation of GetClientsForEvent method
-        public override List<Guid> GetClientsForEvent(object args, object eventType)
-        {
-            if (eventType is not ServerEventType type)
-            {
-                return new List<Guid>();
-            }
-
-            return _clientSubscriptions
-                .Where(kv => kv.Value.Contains(type))
-                .Select(kv => kv.Key)
-                .ToList();
-        }
+        return Task.FromResult(true);
     }
+
+    protected override Task<bool> UpdateSubscriptionCore(
+        Guid clientId,
+        int subscriptionId,
+        IReadOnlyCollection<ServerEventType> eventTypes,
+        CancellationToken cancellationToken)
+    {
+        // Для цього демо оновлення = повторна підписка. Викликаємо *Core напряму (НЕ публічний
+        // Subscribe), бо ми вже під OperationLock — інакше повторний захід у семафор = дедлок.
+        _ = SubscribeCore(clientId, string.Empty, eventTypes, cancellationToken);
+        return Task.FromResult(true);
+    }
+
+    public override List<Guid> GetClientsForEvent(object args, ServerEventType eventType)
+    {
+        return _clientSubscriptions
+            .Where(kv => kv.Value.Contains(eventType))
+            .Select(kv => kv.Key)
+            .ToList();
+    }
+}

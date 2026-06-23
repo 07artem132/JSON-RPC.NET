@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using WsRpcServer.Core;
 
@@ -8,19 +8,25 @@ namespace WsRpcServer.Subscriptions;
 /// Абстрактний базовий клас для менеджерів підписок.
 /// Реалізує базову логіку для управління підписками клієнтів.
 /// </summary>
+/// <typeparam name="TEventType">Тип, що ідентифікує вид події.</typeparam>
+/// <typeparam name="TEventArgs">Тип аргументів події для фільтрації у GetClientsForEvent.</typeparam>
 /// <param name="logger">Логер для реєстрації подій менеджера.</param>
 /// <param name="maxSubscriptionsPerClient">Максимальна кількість підписок на одного клієнта.</param>
 /// <remarks>
 /// Цей клас забезпечує базову інфраструктуру для менеджерів підписок, включаючи:
 /// - Потокобезпечне управління кількістю підписок клієнтів
 /// - Обмеження максимальної кількості підписок на клієнта
-/// - Синхронізацію доступу до спільних ресурсів через SemaphoreSlim
-/// 
-/// Реалізує інтерфейс ISubscriptionManager, залишаючи конкретну логіку
-/// управління підписками для реалізації у похідних класах.
+/// - Серіалізацію мутаційних операцій (Subscribe/Unsubscribe/UpdateSubscription) через
+///   <see cref="OperationLock"/>: базовий клас САМ використовує лок у шаблонних методах
+///   (M2 — раніше лок лише оголошувався, але ніде не застосовувався, що було пасткою API).
+///
+/// Похідні класи реалізують лише <c>*Core</c>-методи з власною бізнес-логікою; синхронізацію
+/// мутацій забезпечує база. Гаряча дорога читання (<see cref="GetClientsForEvent"/>) лишається
+/// абстрактною й НЕ бере write-орієнтований <see cref="OperationLock"/> — конкурентність читань
+/// має забезпечувати сховище підписок.
 /// </remarks>
-public abstract class AbstractSubscriptionManager(ILogger logger, int maxSubscriptionsPerClient = 10)
-    : ISubscriptionManager
+public abstract class AbstractSubscriptionManager<TEventType, TEventArgs>(ILogger logger, int maxSubscriptionsPerClient = 10)
+    : ISubscriptionManager<TEventType, TEventArgs>
 {
     /// <summary>
     /// Логер для реєстрації подій менеджера підписок.
@@ -28,15 +34,12 @@ public abstract class AbstractSubscriptionManager(ILogger logger, int maxSubscri
     protected ILogger Logger { get; } = logger ?? throw new ArgumentNullException(nameof(logger));
 
     /// <summary>
-    /// Семафор для синхронізації операцій з підписками.
+    /// Семафор для серіалізації мутаційних операцій з підписками.
     /// </summary>
     /// <remarks>
-    /// SemaphoreSlim використовується для синхронізації доступу до спільних ресурсів
-    /// при операціях з підписками. Це дозволяє безпечно виконувати операції з різних потоків,
-    /// уникаючи проблем з паралельним доступом.
-    ///
-    /// Ініціалізується з початковою кількістю 1 та максимальною кількістю 1,
-    /// що означає, що лише один потік може одночасно виконувати операції з підписками.
+    /// Ініціалізується з початковою кількістю 1 та максимальною 1, тож лише один потік одночасно
+    /// виконує мутаційну операцію. База застосовує його у <see cref="WithLockAsync{TResult}"/>,
+    /// який обгортає <c>Subscribe</c>/<c>Unsubscribe</c>/<c>UpdateSubscription</c>.
     /// </remarks>
     protected SemaphoreSlim OperationLock { get; } = new(1, 1);
 
@@ -45,8 +48,7 @@ public abstract class AbstractSubscriptionManager(ILogger logger, int maxSubscri
     /// </summary>
     /// <remarks>
     /// ConcurrentDictionary використовується для потокобезпечного зберігання кількості
-    /// підписок кожного клієнта. Це дозволяє швидко перевіряти обмеження на кількість
-    /// підписок без необхідності додаткової синхронізації.
+    /// підписок кожного клієнта.
     ///
     /// Ключ: Guid - ідентифікатор клієнта
     /// Значення: int - кількість підписок клієнта
@@ -68,65 +70,119 @@ public abstract class AbstractSubscriptionManager(ILogger logger, int maxSubscri
     protected bool IsDisposed { get; set; }
 
     /// <summary>
-    /// Створює підписку на події для клієнта.
+    /// Виконує мутаційну операцію під <see cref="OperationLock"/> — серіалізує доступ
+    /// (M2: база реально використовує лок, а не лише оголошує його).
+    /// </summary>
+    /// <typeparam name="TResult">Тип результату операції.</typeparam>
+    /// <param name="action">Асинхронна дія, що виконується під локом.</param>
+    /// <param name="cancellationToken">Токен скасування очікування лока.</param>
+    /// <returns>Результат дії.</returns>
+    /// <exception cref="ObjectDisposedException">Якщо менеджер уже утилізований.</exception>
+    protected async Task<TResult> WithLockAsync<TResult>(
+        Func<Task<TResult>> action,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        ObjectDisposedException.ThrowIf(IsDisposed, this);
+
+        await OperationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await action().ConfigureAwait(false);
+        }
+        finally
+        {
+            OperationLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Створює підписку на події для клієнта (серіалізовано через <see cref="OperationLock"/>).
     /// </summary>
     /// <param name="clientId">Ідентифікатор клієнта.</param>
-    /// <param name="account">Акаунт для підписки.</param>
+    /// <param name="topic">Тема/сегмент підписки.</param>
     /// <param name="eventTypes">Типи подій для підписки.</param>
     /// <param name="cancellationToken">Токен скасування.</param>
     /// <returns>Ідентифікатор підписки.</returns>
-    /// <remarks>
-    /// Абстрактний метод, який має бути реалізований у похідних класах.
-    /// Повинен забезпечувати:
-    /// - Перевірку обмеження на кількість підписок клієнта
-    /// - Створення та збереження підписки
-    /// - Повернення унікального ідентифікатора підписки
-    /// </remarks>
-    public abstract Task<int> Subscribe(
+    public Task<int> Subscribe(
         Guid clientId,
-        string account,
-        object eventTypes,
-        CancellationToken cancellationToken = default);
+        string topic,
+        IReadOnlyCollection<TEventType> eventTypes,
+        CancellationToken cancellationToken = default)
+        => WithLockAsync(() => SubscribeCore(clientId, topic, eventTypes, cancellationToken), cancellationToken);
 
     /// <summary>
-    /// Скасовує підписку клієнта.
+    /// Скасовує підписку клієнта (серіалізовано через <see cref="OperationLock"/>).
     /// </summary>
     /// <param name="clientId">Ідентифікатор клієнта.</param>
     /// <param name="subscriptionId">Ідентифікатор підписки.</param>
     /// <param name="cancellationToken">Токен скасування.</param>
-    /// <returns>True, якщо скасування підписки було успішним, інакше False.</returns>
-    /// <remarks>
-    /// Абстрактний метод, який має бути реалізований у похідних класах.
-    /// Повинен забезпечувати:
-    /// - Видалення підписки зі сховища
-    /// - Оновлення лічильника підписок клієнта
-    /// - Звільнення пов'язаних ресурсів (наприклад, зовнішніх підписок)
-    /// </remarks>
-    public abstract Task<bool> Unsubscribe(
+    /// <returns>True, якщо скасування було успішним, інакше False.</returns>
+    public Task<bool> Unsubscribe(
         Guid clientId,
         int subscriptionId,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default)
+        => WithLockAsync(() => UnsubscribeCore(clientId, subscriptionId, cancellationToken), cancellationToken);
 
     /// <summary>
-    /// Оновлює підписку.
+    /// Оновлює підписку (серіалізовано через <see cref="OperationLock"/>).
     /// </summary>
     /// <param name="clientId">Ідентифікатор клієнта.</param>
     /// <param name="subscriptionId">Ідентифікатор підписки.</param>
     /// <param name="eventTypes">Нові типи подій.</param>
     /// <param name="cancellationToken">Токен скасування.</param>
     /// <returns>True, якщо оновлення було успішним, інакше False.</returns>
-    /// <remarks>
-    /// Абстрактний метод, який має бути реалізований у похідних класах.
-    /// Повинен забезпечувати:
-    /// - Перевірку існування підписки
-    /// - Перевірку прав доступу клієнта до підписки
-    /// - Оновлення типів подій підписки
-    /// </remarks>
-    public abstract Task<bool> UpdateSubscription(
+    public Task<bool> UpdateSubscription(
         Guid clientId,
         int subscriptionId,
-        object eventTypes,
-        CancellationToken cancellationToken = default);
+        IReadOnlyCollection<TEventType> eventTypes,
+        CancellationToken cancellationToken = default)
+        => WithLockAsync(() => UpdateSubscriptionCore(clientId, subscriptionId, eventTypes, cancellationToken), cancellationToken);
+
+    /// <summary>
+    /// Базова реалізація створення підписки. Викликається під <see cref="OperationLock"/>.
+    /// </summary>
+    /// <param name="clientId">Ідентифікатор клієнта.</param>
+    /// <param name="topic">Тема/сегмент підписки.</param>
+    /// <param name="eventTypes">Типи подій для підписки.</param>
+    /// <param name="cancellationToken">Токен скасування.</param>
+    /// <returns>Ідентифікатор підписки.</returns>
+    /// <remarks>
+    /// Похідні класи реалізують логіку перевірки обмеження на кількість підписок, створення та
+    /// збереження підписки, повернення унікального ідентифікатора. Додаткова синхронізація мутацій
+    /// не потрібна — метод уже виконується під локом.
+    /// </remarks>
+    protected abstract Task<int> SubscribeCore(
+        Guid clientId,
+        string topic,
+        IReadOnlyCollection<TEventType> eventTypes,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Базова реалізація скасування підписки. Викликається під <see cref="OperationLock"/>.
+    /// </summary>
+    /// <param name="clientId">Ідентифікатор клієнта.</param>
+    /// <param name="subscriptionId">Ідентифікатор підписки.</param>
+    /// <param name="cancellationToken">Токен скасування.</param>
+    /// <returns>True, якщо скасування було успішним, інакше False.</returns>
+    protected abstract Task<bool> UnsubscribeCore(
+        Guid clientId,
+        int subscriptionId,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Базова реалізація оновлення підписки. Викликається під <see cref="OperationLock"/>.
+    /// </summary>
+    /// <param name="clientId">Ідентифікатор клієнта.</param>
+    /// <param name="subscriptionId">Ідентифікатор підписки.</param>
+    /// <param name="eventTypes">Нові типи подій.</param>
+    /// <param name="cancellationToken">Токен скасування.</param>
+    /// <returns>True, якщо оновлення було успішним, інакше False.</returns>
+    protected abstract Task<bool> UpdateSubscriptionCore(
+        Guid clientId,
+        int subscriptionId,
+        IReadOnlyCollection<TEventType> eventTypes,
+        CancellationToken cancellationToken);
 
     /// <summary>
     /// Отримує клієнтів, які повинні отримати подію.
@@ -135,16 +191,10 @@ public abstract class AbstractSubscriptionManager(ILogger logger, int maxSubscri
     /// <param name="eventType">Тип події.</param>
     /// <returns>Список ідентифікаторів клієнтів.</returns>
     /// <remarks>
-    /// Абстрактний метод, який має бути реалізований у похідних класах.
-    /// Повинен забезпечувати:
-    /// - Фільтрацію підписок за типом події
-    /// - Фільтрацію підписок за аргументами події (якщо потрібно)
-    /// - Повернення списку клієнтів, які підписані на цю подію
-    /// 
-    /// Цей метод є критичним для продуктивності системи підписок.
-    /// Він повинен бути оптимізований для швидкого визначення отримувачів події.
+    /// Гаряча дорога читання — НЕ бере <see cref="OperationLock"/>. Реалізації мають покладатися
+    /// на потокобезпечне сховище підписок для конкурентного доступу.
     /// </remarks>
-    public abstract List<Guid> GetClientsForEvent(object args, object eventType);
+    public abstract List<Guid> GetClientsForEvent(TEventArgs args, TEventType eventType);
 
     /// <summary>
     /// Звільняє ресурси, що використовуються менеджером підписок.
@@ -152,9 +202,6 @@ public abstract class AbstractSubscriptionManager(ILogger logger, int maxSubscri
     /// <remarks>
     /// Звільняє SemaphoreSlim та встановлює прапорець IsDisposed,
     /// щоб уникнути повторної утилізації.
-    /// 
-    /// Віртуальний метод дозволяє похідним класам розширювати логіку утилізації,
-    /// зберігаючи базову функціональність.
     /// </remarks>
     public virtual void Dispose()
     {

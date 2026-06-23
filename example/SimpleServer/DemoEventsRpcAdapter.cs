@@ -7,16 +7,16 @@ using WsRpcServer.Services;
 namespace SimpleServer;
 
 public class DemoEventsRpcAdapter(
-    ISubscriptionManager subscriptionManager,
+    ISubscriptionManager<ServerEventType, object> subscriptionManager,
     ILogger<DemoEventsRpcAdapter> logger,
     Guid clientId) : IDemoEventsRpc
 {
-    public async Task<int> Subscribe(string account, ServerEventType[] eventTypes, CancellationToken cancellationToken = default)
+    public async Task<int> Subscribe(string topic, ServerEventType[] eventTypes, CancellationToken cancellationToken = default)
     {
         logger.LogInformation("RPC: Client {ClientId} subscribing to {EventTypes}", clientId, eventTypes);
         try
         {
-            return await subscriptionManager.Subscribe(clientId, account, eventTypes, cancellationToken);
+            return await subscriptionManager.Subscribe(clientId, topic, eventTypes, cancellationToken);
         }
         catch (Exception ex)
         {

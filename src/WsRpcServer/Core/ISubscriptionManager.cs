@@ -1,33 +1,42 @@
-﻿namespace WsRpcServer.Core;
+namespace WsRpcServer.Core;
 
 /// <summary>
 /// Інтерфейс для менеджерів підписок.
 /// Визначає контракт для управління підписками клієнтів на події системи.
 /// </summary>
+/// <typeparam name="TEventType">
+/// Тип, що ідентифікує вид події (наприклад, enum або рядок). Узагальнення прибирає
+/// <c>object</c>-параметри й повертає типобезпеку (M4).
+/// </typeparam>
+/// <typeparam name="TEventArgs">
+/// Тип аргументів події, за якими фільтруються підписки у <see cref="GetClientsForEvent"/>.
+/// </typeparam>
 /// <remarks>
 /// Цей інтерфейс є ключовим для забезпечення реактивної взаємодії між сервером та клієнтами.
 /// Він абстрагує логіку підписок, дозволяючи різним реалізаціям використовувати різні стратегії
 /// зберігання та обробки підписок (наприклад, in-memory, база даних, розподілене сховище).
 /// </remarks>
-public interface ISubscriptionManager : IDisposable
+public interface ISubscriptionManager<TEventType, TEventArgs> : IDisposable
 {
     /// <summary>
     /// Створює підписку на події для клієнта.
     /// </summary>
     /// <param name="clientId">Ідентифікатор клієнта, який підписується.</param>
-    /// <param name="account">Акаунт або ресурс для підписки (наприклад, ідентифікатор каналу або теми).</param>
-    /// <param name="eventTypes">Типи подій, на які клієнт бажає підписатися. Використовується object для гнучкості.</param>
+    /// <param name="topic">
+    /// Тема або сегмент підписки (наприклад, ідентифікатор каналу). Узагальнена назва замість
+    /// доменно-специфічного «account» (M3).
+    /// </param>
+    /// <param name="eventTypes">Типи подій, на які клієнт бажає підписатися.</param>
     /// <param name="cancellationToken">Токен скасування для асинхронної операції.</param>
     /// <returns>Ідентифікатор нової підписки, який клієнт може використовувати для подальших операцій.</returns>
     /// <remarks>
-    /// Метод повертає Task&lt;int&gt;, оскільки створення підписки може вимагати асинхронної взаємодії
-    /// з зовнішніми системами. Використання object для eventTypes дозволяє підтримувати різні моделі
-    /// типів подій (enum, string, складні об'єкти) без зміни інтерфейсу.
+    /// Метод повертає <see cref="Task{TResult}"/>, оскільки створення підписки може вимагати
+    /// асинхронної взаємодії з зовнішніми системами.
     /// </remarks>
     Task<int> Subscribe(
         Guid clientId,
-        string account,
-        object eventTypes,
+        string topic,
+        IReadOnlyCollection<TEventType> eventTypes,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -37,11 +46,6 @@ public interface ISubscriptionManager : IDisposable
     /// <param name="subscriptionId">Ідентифікатор підписки для скасування.</param>
     /// <param name="cancellationToken">Токен скасування для асинхронної операції.</param>
     /// <returns>True, якщо скасування підписки було успішним, інакше False.</returns>
-    /// <remarks>
-    /// Повертає Task&lt;bool&gt; для індикації успіху операції, оскільки скасування
-    /// підписки може не вдатися з різних причин (наприклад, підписка не існує або
-    /// недостатньо прав для її скасування).
-    /// </remarks>
     Task<bool> Unsubscribe(
         Guid clientId,
         int subscriptionId,
@@ -55,14 +59,10 @@ public interface ISubscriptionManager : IDisposable
     /// <param name="eventTypes">Нові типи подій для підписки.</param>
     /// <param name="cancellationToken">Токен скасування для асинхронної операції.</param>
     /// <returns>True, якщо оновлення було успішним, інакше False.</returns>
-    /// <remarks>
-    /// Цей метод дозволяє змінювати параметри підписки без необхідності її перестворення.
-    /// Це особливо корисно для сценаріїв, де створення нової підписки може бути витратним.
-    /// </remarks>
     Task<bool> UpdateSubscription(
         Guid clientId,
         int subscriptionId,
-        object eventTypes,
+        IReadOnlyCollection<TEventType> eventTypes,
         CancellationToken cancellationToken = default);
 
     /// <summary>
@@ -73,8 +73,11 @@ public interface ISubscriptionManager : IDisposable
     /// <returns>Список ідентифікаторів клієнтів, які підписані на цю подію.</returns>
     /// <remarks>
     /// Цей метод є ключовим для ефективної доставки подій. Він повинен швидко визначати,
-    /// які клієнти зацікавлені в конкретній події, уникаючи непотрібних пересилань.
-    /// Використання object для args та eventType забезпечує гнучкість без прив'язки до конкретних типів.
+    /// які клієнти зацікавлені в конкретній події, уникаючи непотрібних пересилань. Це гаряча
+    /// дорога читання, тож реалізації мають покладатися на потокобезпечне сховище (наприклад,
+    /// <see cref="AbstractSubscriptionStore{TSubscription,TEventArgs,TEventType}"/> з
+    /// <see cref="System.Threading.ReaderWriterLockSlim"/>), а не на write-орієнтований
+    /// <c>OperationLock</c> менеджера.
     /// </remarks>
-    List<Guid> GetClientsForEvent(object args, object eventType);
+    List<Guid> GetClientsForEvent(TEventArgs args, TEventType eventType);
 }

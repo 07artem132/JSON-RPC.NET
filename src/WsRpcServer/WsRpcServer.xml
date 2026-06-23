@@ -326,33 +326,42 @@
             Викликається в контексті ReadLock, тому не потребує додаткової синхронізації.
             </remarks>
         </member>
-        <member name="T:WsRpcServer.Core.ISubscriptionManager">
+        <member name="T:WsRpcServer.Core.ISubscriptionManager`2">
             <summary>
             Інтерфейс для менеджерів підписок.
             Визначає контракт для управління підписками клієнтів на події системи.
             </summary>
+            <typeparam name="TEventType">
+            Тип, що ідентифікує вид події (наприклад, enum або рядок). Узагальнення прибирає
+            <c>object</c>-параметри й повертає типобезпеку (M4).
+            </typeparam>
+            <typeparam name="TEventArgs">
+            Тип аргументів події, за якими фільтруються підписки у <see cref="M:WsRpcServer.Core.ISubscriptionManager`2.GetClientsForEvent(`1,`0)"/>.
+            </typeparam>
             <remarks>
             Цей інтерфейс є ключовим для забезпечення реактивної взаємодії між сервером та клієнтами.
             Він абстрагує логіку підписок, дозволяючи різним реалізаціям використовувати різні стратегії
             зберігання та обробки підписок (наприклад, in-memory, база даних, розподілене сховище).
             </remarks>
         </member>
-        <member name="M:WsRpcServer.Core.ISubscriptionManager.Subscribe(System.Guid,System.String,System.Object,System.Threading.CancellationToken)">
+        <member name="M:WsRpcServer.Core.ISubscriptionManager`2.Subscribe(System.Guid,System.String,System.Collections.Generic.IReadOnlyCollection{`0},System.Threading.CancellationToken)">
             <summary>
             Створює підписку на події для клієнта.
             </summary>
             <param name="clientId">Ідентифікатор клієнта, який підписується.</param>
-            <param name="account">Акаунт або ресурс для підписки (наприклад, ідентифікатор каналу або теми).</param>
-            <param name="eventTypes">Типи подій, на які клієнт бажає підписатися. Використовується object для гнучкості.</param>
+            <param name="topic">
+            Тема або сегмент підписки (наприклад, ідентифікатор каналу). Узагальнена назва замість
+            доменно-специфічного «account» (M3).
+            </param>
+            <param name="eventTypes">Типи подій, на які клієнт бажає підписатися.</param>
             <param name="cancellationToken">Токен скасування для асинхронної операції.</param>
             <returns>Ідентифікатор нової підписки, який клієнт може використовувати для подальших операцій.</returns>
             <remarks>
-            Метод повертає Task&lt;int&gt;, оскільки створення підписки може вимагати асинхронної взаємодії
-            з зовнішніми системами. Використання object для eventTypes дозволяє підтримувати різні моделі
-            типів подій (enum, string, складні об'єкти) без зміни інтерфейсу.
+            Метод повертає <see cref="T:System.Threading.Tasks.Task`1"/>, оскільки створення підписки може вимагати
+            асинхронної взаємодії з зовнішніми системами.
             </remarks>
         </member>
-        <member name="M:WsRpcServer.Core.ISubscriptionManager.Unsubscribe(System.Guid,System.Int32,System.Threading.CancellationToken)">
+        <member name="M:WsRpcServer.Core.ISubscriptionManager`2.Unsubscribe(System.Guid,System.Int32,System.Threading.CancellationToken)">
             <summary>
             Скасовує підписку клієнта.
             </summary>
@@ -360,13 +369,8 @@
             <param name="subscriptionId">Ідентифікатор підписки для скасування.</param>
             <param name="cancellationToken">Токен скасування для асинхронної операції.</param>
             <returns>True, якщо скасування підписки було успішним, інакше False.</returns>
-            <remarks>
-            Повертає Task&lt;bool&gt; для індикації успіху операції, оскільки скасування
-            підписки може не вдатися з різних причин (наприклад, підписка не існує або
-            недостатньо прав для її скасування).
-            </remarks>
         </member>
-        <member name="M:WsRpcServer.Core.ISubscriptionManager.UpdateSubscription(System.Guid,System.Int32,System.Object,System.Threading.CancellationToken)">
+        <member name="M:WsRpcServer.Core.ISubscriptionManager`2.UpdateSubscription(System.Guid,System.Int32,System.Collections.Generic.IReadOnlyCollection{`0},System.Threading.CancellationToken)">
             <summary>
             Оновлює існуючу підписку.
             </summary>
@@ -375,12 +379,8 @@
             <param name="eventTypes">Нові типи подій для підписки.</param>
             <param name="cancellationToken">Токен скасування для асинхронної операції.</param>
             <returns>True, якщо оновлення було успішним, інакше False.</returns>
-            <remarks>
-            Цей метод дозволяє змінювати параметри підписки без необхідності її перестворення.
-            Це особливо корисно для сценаріїв, де створення нової підписки може бути витратним.
-            </remarks>
         </member>
-        <member name="M:WsRpcServer.Core.ISubscriptionManager.GetClientsForEvent(System.Object,System.Object)">
+        <member name="M:WsRpcServer.Core.ISubscriptionManager`2.GetClientsForEvent(`1,`0)">
             <summary>
             Отримує список клієнтів, які повинні отримати подію конкретного типу.
             </summary>
@@ -389,8 +389,11 @@
             <returns>Список ідентифікаторів клієнтів, які підписані на цю подію.</returns>
             <remarks>
             Цей метод є ключовим для ефективної доставки подій. Він повинен швидко визначати,
-            які клієнти зацікавлені в конкретній події, уникаючи непотрібних пересилань.
-            Використання object для args та eventType забезпечує гнучкість без прив'язки до конкретних типів.
+            які клієнти зацікавлені в конкретній події, уникаючи непотрібних пересилань. Це гаряча
+            дорога читання, тож реалізації мають покладатися на потокобезпечне сховище (наприклад,
+            <see cref="T:WsRpcServer.Core.AbstractSubscriptionStore`3"/> з
+            <see cref="T:System.Threading.ReaderWriterLockSlim"/>), а не на write-орієнтований
+            <c>OperationLock</c> менеджера.
             </remarks>
         </member>
         <member name="T:WsRpcServer.Core.ISubscriptionStore`3">
@@ -1008,7 +1011,7 @@
             Додає базову конфігурацію JSON-RPC сервера до колекції сервісів (через options-pattern
             з fail-fast валідацією). Реєстрація конкретних реалізацій сервісів виконується через
             узагальнену перевантажену версію
-            <see cref="M:WsRpcServer.Extensions.JsonRpcCoreExtensions.AddJsonRpcCore``5(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{WsRpcServer.Core.JsonRpcServerConfig})"/>.
+            <see cref="M:WsRpcServer.Extensions.JsonRpcCoreExtensions.AddJsonRpcCore``7(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{WsRpcServer.Core.JsonRpcServerConfig})"/>.
             </summary>
             <param name="services">Колекція сервісів.</param>
             <param name="configureOptions">Опціональна дія для налаштування сервера.</param>
@@ -1022,7 +1025,7 @@
             з кодом, що ін'єктить конфіг напряму. Повторний виклик ідемпотентний (M5/H1).
             </remarks>
         </member>
-        <member name="M:WsRpcServer.Extensions.JsonRpcCoreExtensions.AddJsonRpcCore``5(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{WsRpcServer.Core.JsonRpcServerConfig})">
+        <member name="M:WsRpcServer.Extensions.JsonRpcCoreExtensions.AddJsonRpcCore``7(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{WsRpcServer.Core.JsonRpcServerConfig})">
             <summary>
             Додає основні JSON-RPC сервіси разом із конкретними реалізаціями сервера, сесії, обробника
             подій, менеджера підписок та реєстру сервісів. Це повний композиційний корінь — споживачу
@@ -1031,8 +1034,10 @@
             <typeparam name="TServer">Конкретний тип сервера (нащадок <see cref="T:WsRpcServer.Core.AbstractJsonRpcServer"/>).</typeparam>
             <typeparam name="TSession">Конкретний тип сесії (нащадок <see cref="T:WsRpcServer.Sessions.AbstractJsonRpcSession"/>).</typeparam>
             <typeparam name="TEventProcessor">Конкретний тип обробника подій (<see cref="T:WsRpcServer.Events.IEventProcessor"/>).</typeparam>
-            <typeparam name="TSubscriptionManager">Конкретний тип менеджера підписок (<see cref="T:WsRpcServer.Core.ISubscriptionManager"/>).</typeparam>
+            <typeparam name="TSubscriptionManager">Конкретний тип менеджера підписок (<see cref="T:WsRpcServer.Core.ISubscriptionManager`2"/>).</typeparam>
             <typeparam name="TRegistry">Конкретний тип реєстру RPC-сервісів (<see cref="T:WsRpcServer.Services.IRpcServiceRegistry"/>).</typeparam>
+            <typeparam name="TEventType">Тип, що ідентифікує вид події (для типобезпечного менеджера підписок).</typeparam>
+            <typeparam name="TEventArgs">Тип аргументів події для фільтрації підписок.</typeparam>
             <param name="services">Колекція сервісів.</param>
             <param name="configureOptions">Опціональна дія для налаштування сервера.</param>
             <returns>Колекція сервісів для ланцюжка викликів.</returns>
@@ -1607,72 +1612,80 @@
             - ...і багато інших
             </remarks>
         </member>
-        <member name="T:WsRpcServer.Subscriptions.AbstractSubscriptionManager">
-            <summary>
-            Абстрактний базовий клас для менеджерів підписок.
-            Реалізує базову логіку для управління підписками клієнтів.
-            </summary>
-            <param name="logger">Логер для реєстрації подій менеджера.</param>
-            <param name="maxSubscriptionsPerClient">Максимальна кількість підписок на одного клієнта.</param>
-            <remarks>
-            Цей клас забезпечує базову інфраструктуру для менеджерів підписок, включаючи:
-            - Потокобезпечне управління кількістю підписок клієнтів
-            - Обмеження максимальної кількості підписок на клієнта
-            - Синхронізацію доступу до спільних ресурсів через SemaphoreSlim
+        <member name="T:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2">
+             <summary>
+             Абстрактний базовий клас для менеджерів підписок.
+             Реалізує базову логіку для управління підписками клієнтів.
+             </summary>
+             <typeparam name="TEventType">Тип, що ідентифікує вид події.</typeparam>
+             <typeparam name="TEventArgs">Тип аргументів події для фільтрації у GetClientsForEvent.</typeparam>
+             <param name="logger">Логер для реєстрації подій менеджера.</param>
+             <param name="maxSubscriptionsPerClient">Максимальна кількість підписок на одного клієнта.</param>
+             <remarks>
+             Цей клас забезпечує базову інфраструктуру для менеджерів підписок, включаючи:
+             - Потокобезпечне управління кількістю підписок клієнтів
+             - Обмеження максимальної кількості підписок на клієнта
+             - Серіалізацію мутаційних операцій (Subscribe/Unsubscribe/UpdateSubscription) через
+               <see cref="P:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.OperationLock"/>: базовий клас САМ використовує лок у шаблонних методах
+               (M2 — раніше лок лише оголошувався, але ніде не застосовувався, що було пасткою API).
             
-            Реалізує інтерфейс ISubscriptionManager, залишаючи конкретну логіку
-            управління підписками для реалізації у похідних класах.
-            </remarks>
+             Похідні класи реалізують лише <c>*Core</c>-методи з власною бізнес-логікою; синхронізацію
+             мутацій забезпечує база. Гаряча дорога читання (<see cref="M:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.GetClientsForEvent(`1,`0)"/>) лишається
+             абстрактною й НЕ бере write-орієнтований <see cref="P:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.OperationLock"/> — конкурентність читань
+             має забезпечувати сховище підписок.
+             </remarks>
         </member>
-        <member name="M:WsRpcServer.Subscriptions.AbstractSubscriptionManager.#ctor(Microsoft.Extensions.Logging.ILogger,System.Int32)">
-            <summary>
-            Абстрактний базовий клас для менеджерів підписок.
-            Реалізує базову логіку для управління підписками клієнтів.
-            </summary>
-            <param name="logger">Логер для реєстрації подій менеджера.</param>
-            <param name="maxSubscriptionsPerClient">Максимальна кількість підписок на одного клієнта.</param>
-            <remarks>
-            Цей клас забезпечує базову інфраструктуру для менеджерів підписок, включаючи:
-            - Потокобезпечне управління кількістю підписок клієнтів
-            - Обмеження максимальної кількості підписок на клієнта
-            - Синхронізацію доступу до спільних ресурсів через SemaphoreSlim
+        <member name="M:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.#ctor(Microsoft.Extensions.Logging.ILogger,System.Int32)">
+             <summary>
+             Абстрактний базовий клас для менеджерів підписок.
+             Реалізує базову логіку для управління підписками клієнтів.
+             </summary>
+             <typeparam name="TEventType">Тип, що ідентифікує вид події.</typeparam>
+             <typeparam name="TEventArgs">Тип аргументів події для фільтрації у GetClientsForEvent.</typeparam>
+             <param name="logger">Логер для реєстрації подій менеджера.</param>
+             <param name="maxSubscriptionsPerClient">Максимальна кількість підписок на одного клієнта.</param>
+             <remarks>
+             Цей клас забезпечує базову інфраструктуру для менеджерів підписок, включаючи:
+             - Потокобезпечне управління кількістю підписок клієнтів
+             - Обмеження максимальної кількості підписок на клієнта
+             - Серіалізацію мутаційних операцій (Subscribe/Unsubscribe/UpdateSubscription) через
+               <see cref="P:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.OperationLock"/>: базовий клас САМ використовує лок у шаблонних методах
+               (M2 — раніше лок лише оголошувався, але ніде не застосовувався, що було пасткою API).
             
-            Реалізує інтерфейс ISubscriptionManager, залишаючи конкретну логіку
-            управління підписками для реалізації у похідних класах.
-            </remarks>
+             Похідні класи реалізують лише <c>*Core</c>-методи з власною бізнес-логікою; синхронізацію
+             мутацій забезпечує база. Гаряча дорога читання (<see cref="M:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.GetClientsForEvent(`1,`0)"/>) лишається
+             абстрактною й НЕ бере write-орієнтований <see cref="P:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.OperationLock"/> — конкурентність читань
+             має забезпечувати сховище підписок.
+             </remarks>
         </member>
-        <member name="P:WsRpcServer.Subscriptions.AbstractSubscriptionManager.Logger">
+        <member name="P:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.Logger">
             <summary>
             Логер для реєстрації подій менеджера підписок.
             </summary>
         </member>
-        <member name="P:WsRpcServer.Subscriptions.AbstractSubscriptionManager.OperationLock">
-             <summary>
-             Семафор для синхронізації операцій з підписками.
-             </summary>
-             <remarks>
-             SemaphoreSlim використовується для синхронізації доступу до спільних ресурсів
-             при операціях з підписками. Це дозволяє безпечно виконувати операції з різних потоків,
-             уникаючи проблем з паралельним доступом.
-            
-             Ініціалізується з початковою кількістю 1 та максимальною кількістю 1,
-             що означає, що лише один потік може одночасно виконувати операції з підписками.
-             </remarks>
+        <member name="P:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.OperationLock">
+            <summary>
+            Семафор для серіалізації мутаційних операцій з підписками.
+            </summary>
+            <remarks>
+            Ініціалізується з початковою кількістю 1 та максимальною 1, тож лише один потік одночасно
+            виконує мутаційну операцію. База застосовує його у <see cref="M:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.WithLockAsync``1(System.Func{System.Threading.Tasks.Task{``0}},System.Threading.CancellationToken)"/>,
+            який обгортає <c>Subscribe</c>/<c>Unsubscribe</c>/<c>UpdateSubscription</c>.
+            </remarks>
         </member>
-        <member name="P:WsRpcServer.Subscriptions.AbstractSubscriptionManager.ClientSubscriptionCounts">
+        <member name="P:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.ClientSubscriptionCounts">
              <summary>
              Словник для відстеження кількості підписок кожного клієнта.
              </summary>
              <remarks>
              ConcurrentDictionary використовується для потокобезпечного зберігання кількості
-             підписок кожного клієнта. Це дозволяє швидко перевіряти обмеження на кількість
-             підписок без необхідності додаткової синхронізації.
+             підписок кожного клієнта.
             
              Ключ: Guid - ідентифікатор клієнта
              Значення: int - кількість підписок клієнта
              </remarks>
         </member>
-        <member name="P:WsRpcServer.Subscriptions.AbstractSubscriptionManager.MaxSubscriptionsPerClient">
+        <member name="P:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.MaxSubscriptionsPerClient">
             <summary>
             Максимальна кількість підписок на одного клієнта.
             </summary>
@@ -1681,62 +1694,86 @@
             За замовчуванням встановлено значення 10, яке можна змінити через конструктор.
             </remarks>
         </member>
-        <member name="P:WsRpcServer.Subscriptions.AbstractSubscriptionManager.IsDisposed">
+        <member name="P:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.IsDisposed">
             <summary>
             Прапорець, що вказує, чи був менеджер утилізований.
             </summary>
         </member>
-        <member name="M:WsRpcServer.Subscriptions.AbstractSubscriptionManager.Subscribe(System.Guid,System.String,System.Object,System.Threading.CancellationToken)">
+        <member name="M:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.WithLockAsync``1(System.Func{System.Threading.Tasks.Task{``0}},System.Threading.CancellationToken)">
             <summary>
-            Створює підписку на події для клієнта.
+            Виконує мутаційну операцію під <see cref="P:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.OperationLock"/> — серіалізує доступ
+            (M2: база реально використовує лок, а не лише оголошує його).
+            </summary>
+            <typeparam name="TResult">Тип результату операції.</typeparam>
+            <param name="action">Асинхронна дія, що виконується під локом.</param>
+            <param name="cancellationToken">Токен скасування очікування лока.</param>
+            <returns>Результат дії.</returns>
+            <exception cref="T:System.ObjectDisposedException">Якщо менеджер уже утилізований.</exception>
+        </member>
+        <member name="M:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.Subscribe(System.Guid,System.String,System.Collections.Generic.IReadOnlyCollection{`0},System.Threading.CancellationToken)">
+            <summary>
+            Створює підписку на події для клієнта (серіалізовано через <see cref="P:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.OperationLock"/>).
             </summary>
             <param name="clientId">Ідентифікатор клієнта.</param>
-            <param name="account">Акаунт для підписки.</param>
+            <param name="topic">Тема/сегмент підписки.</param>
             <param name="eventTypes">Типи подій для підписки.</param>
             <param name="cancellationToken">Токен скасування.</param>
             <returns>Ідентифікатор підписки.</returns>
-            <remarks>
-            Абстрактний метод, який має бути реалізований у похідних класах.
-            Повинен забезпечувати:
-            - Перевірку обмеження на кількість підписок клієнта
-            - Створення та збереження підписки
-            - Повернення унікального ідентифікатора підписки
-            </remarks>
         </member>
-        <member name="M:WsRpcServer.Subscriptions.AbstractSubscriptionManager.Unsubscribe(System.Guid,System.Int32,System.Threading.CancellationToken)">
+        <member name="M:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.Unsubscribe(System.Guid,System.Int32,System.Threading.CancellationToken)">
             <summary>
-            Скасовує підписку клієнта.
+            Скасовує підписку клієнта (серіалізовано через <see cref="P:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.OperationLock"/>).
             </summary>
             <param name="clientId">Ідентифікатор клієнта.</param>
             <param name="subscriptionId">Ідентифікатор підписки.</param>
             <param name="cancellationToken">Токен скасування.</param>
-            <returns>True, якщо скасування підписки було успішним, інакше False.</returns>
-            <remarks>
-            Абстрактний метод, який має бути реалізований у похідних класах.
-            Повинен забезпечувати:
-            - Видалення підписки зі сховища
-            - Оновлення лічильника підписок клієнта
-            - Звільнення пов'язаних ресурсів (наприклад, зовнішніх підписок)
-            </remarks>
+            <returns>True, якщо скасування було успішним, інакше False.</returns>
         </member>
-        <member name="M:WsRpcServer.Subscriptions.AbstractSubscriptionManager.UpdateSubscription(System.Guid,System.Int32,System.Object,System.Threading.CancellationToken)">
+        <member name="M:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.UpdateSubscription(System.Guid,System.Int32,System.Collections.Generic.IReadOnlyCollection{`0},System.Threading.CancellationToken)">
             <summary>
-            Оновлює підписку.
+            Оновлює підписку (серіалізовано через <see cref="P:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.OperationLock"/>).
             </summary>
             <param name="clientId">Ідентифікатор клієнта.</param>
             <param name="subscriptionId">Ідентифікатор підписки.</param>
             <param name="eventTypes">Нові типи подій.</param>
             <param name="cancellationToken">Токен скасування.</param>
             <returns>True, якщо оновлення було успішним, інакше False.</returns>
+        </member>
+        <member name="M:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.SubscribeCore(System.Guid,System.String,System.Collections.Generic.IReadOnlyCollection{`0},System.Threading.CancellationToken)">
+            <summary>
+            Базова реалізація створення підписки. Викликається під <see cref="P:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.OperationLock"/>.
+            </summary>
+            <param name="clientId">Ідентифікатор клієнта.</param>
+            <param name="topic">Тема/сегмент підписки.</param>
+            <param name="eventTypes">Типи подій для підписки.</param>
+            <param name="cancellationToken">Токен скасування.</param>
+            <returns>Ідентифікатор підписки.</returns>
             <remarks>
-            Абстрактний метод, який має бути реалізований у похідних класах.
-            Повинен забезпечувати:
-            - Перевірку існування підписки
-            - Перевірку прав доступу клієнта до підписки
-            - Оновлення типів подій підписки
+            Похідні класи реалізують логіку перевірки обмеження на кількість підписок, створення та
+            збереження підписки, повернення унікального ідентифікатора. Додаткова синхронізація мутацій
+            не потрібна — метод уже виконується під локом.
             </remarks>
         </member>
-        <member name="M:WsRpcServer.Subscriptions.AbstractSubscriptionManager.GetClientsForEvent(System.Object,System.Object)">
+        <member name="M:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.UnsubscribeCore(System.Guid,System.Int32,System.Threading.CancellationToken)">
+            <summary>
+            Базова реалізація скасування підписки. Викликається під <see cref="P:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.OperationLock"/>.
+            </summary>
+            <param name="clientId">Ідентифікатор клієнта.</param>
+            <param name="subscriptionId">Ідентифікатор підписки.</param>
+            <param name="cancellationToken">Токен скасування.</param>
+            <returns>True, якщо скасування було успішним, інакше False.</returns>
+        </member>
+        <member name="M:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.UpdateSubscriptionCore(System.Guid,System.Int32,System.Collections.Generic.IReadOnlyCollection{`0},System.Threading.CancellationToken)">
+            <summary>
+            Базова реалізація оновлення підписки. Викликається під <see cref="P:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.OperationLock"/>.
+            </summary>
+            <param name="clientId">Ідентифікатор клієнта.</param>
+            <param name="subscriptionId">Ідентифікатор підписки.</param>
+            <param name="eventTypes">Нові типи подій.</param>
+            <param name="cancellationToken">Токен скасування.</param>
+            <returns>True, якщо оновлення було успішним, інакше False.</returns>
+        </member>
+        <member name="M:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.GetClientsForEvent(`1,`0)">
             <summary>
             Отримує клієнтів, які повинні отримати подію.
             </summary>
@@ -1744,29 +1781,20 @@
             <param name="eventType">Тип події.</param>
             <returns>Список ідентифікаторів клієнтів.</returns>
             <remarks>
-            Абстрактний метод, який має бути реалізований у похідних класах.
-            Повинен забезпечувати:
-            - Фільтрацію підписок за типом події
-            - Фільтрацію підписок за аргументами події (якщо потрібно)
-            - Повернення списку клієнтів, які підписані на цю подію
-            
-            Цей метод є критичним для продуктивності системи підписок.
-            Він повинен бути оптимізований для швидкого визначення отримувачів події.
+            Гаряча дорога читання — НЕ бере <see cref="P:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.OperationLock"/>. Реалізації мають покладатися
+            на потокобезпечне сховище підписок для конкурентного доступу.
             </remarks>
         </member>
-        <member name="M:WsRpcServer.Subscriptions.AbstractSubscriptionManager.Dispose">
+        <member name="M:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.Dispose">
             <summary>
             Звільняє ресурси, що використовуються менеджером підписок.
             </summary>
             <remarks>
             Звільняє SemaphoreSlim та встановлює прапорець IsDisposed,
             щоб уникнути повторної утилізації.
-            
-            Віртуальний метод дозволяє похідним класам розширювати логіку утилізації,
-            зберігаючи базову функціональність.
             </remarks>
         </member>
-        <member name="M:WsRpcServer.Subscriptions.AbstractSubscriptionManager.Dispose(System.Boolean)">
+        <member name="M:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2.Dispose(System.Boolean)">
             <summary>
             Внутрішня реалізація утилізації, що підтримує патерн Dispose(bool).
             </summary>

@@ -57,7 +57,9 @@ namespace SimpleServer
                 DemoJsonRpcSession,
                 DemoEventProcessor,
                 DemoSubscriptionManager,
-                DemoServiceRegistry>(options =>
+                DemoServiceRegistry,
+                ServerEventType,
+                object>(options =>
             {
                 options.Host = "0.0.0.0";
                 options.Port = 9000;

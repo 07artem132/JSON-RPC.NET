@@ -12,27 +12,27 @@ using Xunit;
 namespace WsRpcServer.Tests.Subscriptions
 {
     // Тестовая реализация абстрактного класса для целей тестирования
-    public class TestSubscriptionManager : AbstractSubscriptionManager
+    public class TestSubscriptionManager : AbstractSubscriptionManager<string, object>
     {
         private readonly Dictionary<Guid, HashSet<int>> _clientSubscriptions = new();
-        private readonly Dictionary<int, string> _subscriptionAccounts = new();
-        private readonly Dictionary<int, object> _subscriptionEventTypes = new();
+        private readonly Dictionary<int, string> _subscriptionTopics = new();
+        private readonly Dictionary<int, IReadOnlyCollection<string>> _subscriptionEventTypes = new();
         private int _nextSubscriptionId = 1;
 
-        public TestSubscriptionManager(ILogger logger, int maxSubscriptionsPerClient = 10) 
+        public TestSubscriptionManager(ILogger logger, int maxSubscriptionsPerClient = 10)
             : base(logger, maxSubscriptionsPerClient)
         {
         }
 
-        // Реализация абстрактных методов для тестирования
-        public override Task<int> Subscribe(
-            Guid clientId, 
-            string account, 
-            object eventTypes, 
-            CancellationToken cancellationToken = default)
+        // Реалізація *Core-методів (виконуються під OperationLock бази — M2)
+        protected override Task<int> SubscribeCore(
+            Guid clientId,
+            string topic,
+            IReadOnlyCollection<string> eventTypes,
+            CancellationToken cancellationToken)
         {
             var subscriptionId = _nextSubscriptionId++;
-            
+
             if (!_clientSubscriptions.TryGetValue(clientId, out var subscriptions))
             {
                 subscriptions = new HashSet<int>();
@@ -46,16 +46,16 @@ namespace WsRpcServer.Tests.Subscriptions
             }
 
             subscriptions.Add(subscriptionId);
-            _subscriptionAccounts[subscriptionId] = account;
+            _subscriptionTopics[subscriptionId] = topic;
             _subscriptionEventTypes[subscriptionId] = eventTypes;
-            
+
             return Task.FromResult(subscriptionId);
         }
 
-        public override Task<bool> Unsubscribe(
-            Guid clientId, 
-            int subscriptionId, 
-            CancellationToken cancellationToken = default)
+        protected override Task<bool> UnsubscribeCore(
+            Guid clientId,
+            int subscriptionId,
+            CancellationToken cancellationToken)
         {
             if (!_clientSubscriptions.TryGetValue(clientId, out var subscriptions))
             {
@@ -65,18 +65,18 @@ namespace WsRpcServer.Tests.Subscriptions
             var result = subscriptions.Remove(subscriptionId);
             if (result)
             {
-                _subscriptionAccounts.Remove(subscriptionId);
+                _subscriptionTopics.Remove(subscriptionId);
                 _subscriptionEventTypes.Remove(subscriptionId);
             }
-            
+
             return Task.FromResult(result);
         }
 
-        public override Task<bool> UpdateSubscription(
-            Guid clientId, 
-            int subscriptionId, 
-            object eventTypes, 
-            CancellationToken cancellationToken = default)
+        protected override Task<bool> UpdateSubscriptionCore(
+            Guid clientId,
+            int subscriptionId,
+            IReadOnlyCollection<string> eventTypes,
+            CancellationToken cancellationToken)
         {
             if (!_clientSubscriptions.TryGetValue(clientId, out var subscriptions) || 
                 !subscriptions.Contains(subscriptionId))
@@ -88,42 +88,23 @@ namespace WsRpcServer.Tests.Subscriptions
             return Task.FromResult(true);
         }
 
-        public override List<Guid> GetClientsForEvent(object args, object eventType)
+        public override List<Guid> GetClientsForEvent(object args, string eventType)
         {
             var result = new List<Guid>();
-    
-            // Получаем строковое представление типа события
-            string eventTypeString = eventType.ToString() ?? "";
-    
+
             foreach (var (clientId, subscriptions) in _clientSubscriptions)
             {
                 foreach (var subscriptionId in subscriptions)
                 {
-                    if (_subscriptionEventTypes.TryGetValue(subscriptionId, out var subscriptionEventType))
+                    if (_subscriptionEventTypes.TryGetValue(subscriptionId, out var subscriptionEventTypes)
+                        && subscriptionEventTypes.Contains(eventType))
                     {
-                        // Проверяем, является ли тип подписки массивом строк
-                        if (subscriptionEventType is string[] eventTypesArray)
-                        {
-                            // Проверяем, содержит ли массив искомый тип события
-                            if (eventTypesArray.Contains(eventTypeString))
-                            {
-                                result.Add(clientId);
-                                break; // Клиент уже добавлен, проверять другие подписки не нужно
-                            }
-                        }
-                        else
-                        {
-                            // Если тип не массив, то просто сравниваем строковые представления
-                            if (subscriptionEventType.ToString() == eventTypeString)
-                            {
-                                result.Add(clientId);
-                                break;
-                            }
-                        }
+                        result.Add(clientId);
+                        break; // Клієнта вже додано, інші підписки перевіряти не треба
                     }
                 }
             }
-    
+
             return result;
         }
 
@@ -438,8 +419,43 @@ namespace WsRpcServer.Tests.Subscriptions
             // Assert
             // Проверяем, что флаг IsDisposed установлен
             Assert.True(_manager.IsDisposedAccessor);
-            // Дополнительных проверок нет, так как нет публичного доступа 
+            // Дополнительных проверок нет, так как нет публичного доступа
             // к проверке состояния OperationLock после вызова Dispose
+        }
+
+        [Fact]
+        public async Task Subscribe_WhileOperationLockHeld_DoesNotProceedUntilReleased()
+        {
+            // Arrange — M2 guard: база САМА серіалізує мутації через OperationLock. Зовнішній тримач
+            // захоплює лок; Subscribe не має проходити, поки лок утримується.
+            await _manager.OperationLockAccessor.WaitAsync();
+
+            // Act
+            var subscribeTask = _manager.Subscribe(_clientId, _testAccount, _eventsCreateOnly);
+
+            // Поки лок утримується, Subscribe детерміновано НЕ завершується.
+            var finished = await Task.WhenAny(subscribeTask, Task.Delay(200));
+            Assert.NotSame(subscribeTask, finished);
+            Assert.Equal(0, _manager.GetSubscriptionCount(_clientId));
+
+            // Відпускаємо лок — мутація проходить.
+            _manager.OperationLockAccessor.Release();
+            var subscriptionId = await subscribeTask.WaitAsync(TimeSpan.FromSeconds(5));
+
+            // Assert
+            Assert.True(subscriptionId > 0);
+            Assert.Equal(1, _manager.GetSubscriptionCount(_clientId));
+        }
+
+        [Fact]
+        public async Task Subscribe_AfterDispose_ThrowsObjectDisposedException()
+        {
+            // Arrange — типізована помилка стану замість гонки на вже-звільненому семафорі.
+            _manager.Dispose();
+
+            // Act & Assert
+            await Assert.ThrowsAsync<ObjectDisposedException>(
+                async () => await _manager.Subscribe(_clientId, _testAccount, _eventsCreateOnly));
         }
     }
 }

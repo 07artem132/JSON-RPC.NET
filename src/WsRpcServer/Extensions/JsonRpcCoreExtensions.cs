@@ -26,7 +26,7 @@ public static class JsonRpcCoreExtensions
     /// Додає базову конфігурацію JSON-RPC сервера до колекції сервісів (через options-pattern
     /// з fail-fast валідацією). Реєстрація конкретних реалізацій сервісів виконується через
     /// узагальнену перевантажену версію
-    /// <see cref="AddJsonRpcCore{TServer,TSession,TEventProcessor,TSubscriptionManager,TRegistry}"/>.
+    /// <see cref="AddJsonRpcCore{TServer,TSession,TEventProcessor,TSubscriptionManager,TRegistry,TEventType,TEventArgs}"/>.
     /// </summary>
     /// <param name="services">Колекція сервісів.</param>
     /// <param name="configureOptions">Опціональна дія для налаштування сервера.</param>
@@ -78,8 +78,10 @@ public static class JsonRpcCoreExtensions
     /// <typeparam name="TServer">Конкретний тип сервера (нащадок <see cref="AbstractJsonRpcServer"/>).</typeparam>
     /// <typeparam name="TSession">Конкретний тип сесії (нащадок <see cref="AbstractJsonRpcSession"/>).</typeparam>
     /// <typeparam name="TEventProcessor">Конкретний тип обробника подій (<see cref="IEventProcessor"/>).</typeparam>
-    /// <typeparam name="TSubscriptionManager">Конкретний тип менеджера підписок (<see cref="ISubscriptionManager"/>).</typeparam>
+    /// <typeparam name="TSubscriptionManager">Конкретний тип менеджера підписок (<see cref="ISubscriptionManager{TEventType,TEventArgs}"/>).</typeparam>
     /// <typeparam name="TRegistry">Конкретний тип реєстру RPC-сервісів (<see cref="IRpcServiceRegistry"/>).</typeparam>
+    /// <typeparam name="TEventType">Тип, що ідентифікує вид події (для типобезпечного менеджера підписок).</typeparam>
+    /// <typeparam name="TEventArgs">Тип аргументів події для фільтрації підписок.</typeparam>
     /// <param name="services">Колекція сервісів.</param>
     /// <param name="configureOptions">Опціональна дія для налаштування сервера.</param>
     /// <returns>Колекція сервісів для ланцюжка викликів.</returns>
@@ -89,13 +91,13 @@ public static class JsonRpcCoreExtensions
     /// виконуються через <c>TryAdd*</c>, тож виклик ідемпотентний і не перетирає вже наявних
     /// реєстрацій (споживач може зареєструвати власну реалізацію до виклику цього методу).
     /// </remarks>
-    public static IServiceCollection AddJsonRpcCore<TServer, TSession, TEventProcessor, TSubscriptionManager, TRegistry>(
+    public static IServiceCollection AddJsonRpcCore<TServer, TSession, TEventProcessor, TSubscriptionManager, TRegistry, TEventType, TEventArgs>(
         this IServiceCollection services,
         Action<JsonRpcServerConfig>? configureOptions = null)
         where TServer : AbstractJsonRpcServer
         where TSession : AbstractJsonRpcSession
         where TEventProcessor : class, IEventProcessor
-        where TSubscriptionManager : class, ISubscriptionManager
+        where TSubscriptionManager : class, ISubscriptionManager<TEventType, TEventArgs>
         where TRegistry : class, IRpcServiceRegistry
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -108,7 +110,7 @@ public static class JsonRpcCoreExtensions
         services.TryAddSingleton<IEventProcessor>(sp => sp.GetRequiredService<TEventProcessor>());
 
         services.TryAddSingleton<TSubscriptionManager>();
-        services.TryAddSingleton<ISubscriptionManager>(sp => sp.GetRequiredService<TSubscriptionManager>());
+        services.TryAddSingleton<ISubscriptionManager<TEventType, TEventArgs>>(sp => sp.GetRequiredService<TSubscriptionManager>());
 
         services.TryAddSingleton<IRpcServiceRegistry, TRegistry>();
 

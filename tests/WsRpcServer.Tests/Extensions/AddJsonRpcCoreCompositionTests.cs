@@ -57,7 +57,9 @@ namespace WsRpcServer.Tests.Extensions
                 TestJsonRpcSession,
                 TestEventProcessor,
                 TestSubscriptionManager,
-                CompositionTestRegistry>(configure);
+                CompositionTestRegistry,
+                string,
+                object>(configure);
 
         [Fact]
         public void RegistersAllCoreServices_AllResolvable()
@@ -68,7 +70,7 @@ namespace WsRpcServer.Tests.Extensions
 
             Assert.NotNull(provider.GetRequiredService<JsonRpcServerConfig>());
             Assert.NotNull(provider.GetRequiredService<IEventProcessor>());
-            Assert.NotNull(provider.GetRequiredService<ISubscriptionManager>());
+            Assert.NotNull(provider.GetRequiredService<ISubscriptionManager<string, object>>());
             Assert.NotNull(provider.GetRequiredService<IRpcServiceRegistry>());
             Assert.NotNull(provider.GetRequiredService<CompositionTestServer>());
         }
@@ -95,7 +97,7 @@ namespace WsRpcServer.Tests.Extensions
             using var provider = services.BuildServiceProvider();
 
             var concrete = provider.GetRequiredService<TestSubscriptionManager>();
-            var viaInterface = provider.GetRequiredService<ISubscriptionManager>();
+            var viaInterface = provider.GetRequiredService<ISubscriptionManager<string, object>>();
 
             Assert.Same(concrete, viaInterface);
         }
@@ -125,7 +127,7 @@ namespace WsRpcServer.Tests.Extensions
             AddCore(services);
 
             Assert.Equal(ServiceLifetime.Singleton, services.Single(d => d.ServiceType == typeof(IEventProcessor)).Lifetime);
-            Assert.Equal(ServiceLifetime.Singleton, services.Single(d => d.ServiceType == typeof(ISubscriptionManager)).Lifetime);
+            Assert.Equal(ServiceLifetime.Singleton, services.Single(d => d.ServiceType == typeof(ISubscriptionManager<string, object>)).Lifetime);
             Assert.Equal(ServiceLifetime.Singleton, services.Single(d => d.ServiceType == typeof(IRpcServiceRegistry)).Lifetime);
             Assert.Equal(ServiceLifetime.Singleton, services.Single(d => d.ServiceType == typeof(CompositionTestServer)).Lifetime);
             // Сесія транзієнтна — новий екземпляр на кожне з'єднання.
