@@ -14,7 +14,8 @@
 - **`security-hardening` (1.2.0):** ✅ **H2** (parse-failure throttle), ✅ **H3** (registry thread-safety + multi-impl warning), ✅ **H4** (cancel-before-dispose), ✅ **M9** (CanRead/CanWrite on dispose), plus the transitive **MessagePack** advisory (GHSA-hv8m-jj95-wg3x) pinned out. Each HIGH finding has a regression-guard test; build now passes with the NuGet audit **enabled**. Unit suite 83 → 90.
 - **`ci-bootstrap`:** ✅ **M8** (`.github/workflows/build.yml` — NuGet vulnerability-audit gate + warnings-as-errors build + 90-test suite on push/PR) and the **M7** broken build badge (→ `build.yml`).
 - **`composition-and-config` (1.3.0):** ✅ **H1** (full composition root — generic `AddJsonRpcCore<…>` registers all 5 services + concrete server + idempotency marker) and ✅ **M5** (`JsonRpcServerConfig` DataAnnotations + source-gen `[OptionsValidator]` fail-fast validation). Each guarded by a test; suite 90 → 112.
-- **Still open:** M1–M4, L1–L7. See the table below.
+- **`subscription-manager-cleanup` (2.0.0, BREAKING):** ✅ **M2** (base now uses `OperationLock` via template `*Core` methods), ✅ **M3** (`account` → `topic`), ✅ **M4** (`ISubscriptionManager<TEventType, TEventArgs>` generic, no `object`). Guarded by 2 new tests; suite 112 → 114.
+- **Still open:** M1, L1–L7. See the table below.
 
 ---
 
@@ -154,7 +155,7 @@ public async ValueTask DisposeAsync()
 
 ---
 
-### M2. `AbstractSubscriptionManager` — operation-lock declared but never used in base
+### M2. `AbstractSubscriptionManager` — operation-lock declared but never used in base  ✅ SHIPPED (`subscription-manager-cleanup`, 2.0.0)
 
 **Where:** `src/WsRpcServer/Subscriptions/AbstractSubscriptionManager.cs:41` (declared) + `:159-166` (disposed).
 
@@ -166,7 +167,7 @@ public async ValueTask DisposeAsync()
 
 ---
 
-### M3. `Subscribe(string account, ...)` — `account` param leaks domain-specific concept у generic framework
+### M3. `Subscribe(string account, ...)` — `account` param leaks domain-specific concept у generic framework  ✅ SHIPPED (`subscription-manager-cleanup`, 2.0.0)
 
 **Where:** `src/WsRpcServer/Core/ISubscriptionManager.cs` + `AbstractSubscriptionManager:85-89`.
 
@@ -176,7 +177,7 @@ public async ValueTask DisposeAsync()
 
 ---
 
-### M4. `eventTypes` параметр typed as `object` — lost type safety
+### M4. `eventTypes` параметр typed as `object` — lost type safety  ✅ SHIPPED (`subscription-manager-cleanup`, 2.0.0)
 
 **Where:** `ISubscriptionManager.Subscribe(..., object eventTypes, ...)`, `UpdateSubscription(..., object eventTypes, ...)`, `GetClientsForEvent(object args, object eventType)`.
 

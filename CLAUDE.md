@@ -20,7 +20,7 @@ It is a **framework of abstract base classes** — consumers subclass `AbstractJ
 `[IRpcService]` discovery. The primary downstream consumer is **SignalCliNet.WsRpcServer**.
 
 - Target framework: **net10.0**. Package version lives in `Directory.Build.props`
-  (`<WsRpcServerPackageVersion>`, currently **1.2.0**) — never hardcode `<Version>` in a csproj.
+  (`<WsRpcServerPackageVersion>`, currently **2.0.0**) — never hardcode `<Version>` in a csproj.
 - Five layers: Transport (WebSocket) → Protocol (JSON-RPC 2.0) → Session → Service → Subscription.
 
 ## Build & test
@@ -97,10 +97,17 @@ Path-scoped agent instructions live in `.claude/rules/` (load conditionally when
    `AddJsonRpcCore`; invalid config throws `OptionsValidationException` on resolve. ✅ Shipped in
    `composition-and-config` (1.3.0), guarded by `JsonRpcServerConfigValidationTests`. Don't re-add
    `.ValidateDataAnnotations()` (reflection-based) alongside the source-gen validator.
-8. **Comments and log messages are written in Ukrainian** — match the surrounding code when editing.
+8. **Subscription manager is generic + the base owns its lock.** `ISubscriptionManager<TEventType, TEventArgs>`
+   is generic (no `object` params) and uses `topic` (not `account`). `AbstractSubscriptionManager<…>` makes
+   the public `Subscribe`/`Unsubscribe`/`UpdateSubscription` template wrappers that run the abstract
+   `*Core` methods under `OperationLock` via `WithLockAsync` — the base genuinely serializes mutations
+   (M2). Derived classes override `*Core` and MUST NOT call the public `Subscribe` from inside a `*Core`
+   (re-entrant `OperationLock` = deadlock). `GetClientsForEvent` stays lock-free (hot read path). ✅ Shipped
+   in `subscription-manager-cleanup` (2.0.0), guarded by tests. (This is the breaking 2.0.0 wave.)
+9. **Comments and log messages are written in Ukrainian** — match the surrounding code when editing.
 
-> Rules 3-5 shipped in `security-hardening` (1.2.0); rules 6-7 shipped in `composition-and-config`
-> (1.3.0) — each with a regression-guard test (see
+> Rules 3-5 shipped in `security-hardening` (1.2.0); rules 6-7 in `composition-and-config` (1.3.0);
+> rule 8 in `subscription-manager-cleanup` (2.0.0) — each with a regression-guard test (see
 > `tests/WsRpcServer.Tests/{Transport,Sessions,Events,Subscriptions,Services,Core,Extensions}`).
 > When you fix a remaining finding, add its guard test and move its bullet to a shipped state.
 
@@ -109,7 +116,7 @@ Path-scoped agent instructions live in `.claude/rules/` (load conditionally when
 This repo is mid-maturation. The current floor, established by `foundation-cluster-1` (→ 1.1.0):
 
 - **Build hygiene:** 0 warnings, `TreatWarningsAsErrors=true` on lib + tests; shared `Directory.Build.props`.
-- **Tests:** unit suite green (**112**). Adding a feature that touches an open audit finding SHOULD add the matching regression-guard test (see `.claude/rules/audit-debt.md`).
+- **Tests:** unit suite green (**114**). Adding a feature that touches an open audit finding SHOULD add the matching regression-guard test (see `.claude/rules/audit-debt.md`).
 - **Process:** non-trivial work goes through OpenSpec (`openspec/changes/<name>/`); `AUDIT-FINDINGS.md` is the prioritized backlog (4 HIGH / 9 MEDIUM / 7 LOW).
 
 ## Implemented / planned
@@ -118,7 +125,8 @@ This repo is mid-maturation. The current floor, established by `foundation-clust
 - `security-hardening` (**1.2.0**) — the 4 critical items: `dependency-vuln-messagepack` (MessagePack advisory), `parse-failure-throttle` (H2 + M9), `dispose-cancellation` (H4), `service-registry-thread-safety` (H3). Each guarded by a test; build passes with NuGet audit on; suite 83 → 90. See `openspec/changes/security-hardening/`.
 - `ci-bootstrap` — `.github/workflows/build.yml` (`CI`): NuGet vulnerability-audit gate + warnings-as-errors build + the 90-test suite on push/PR. Closes M8 + the broken README build badge (M7). No version bump (CI is not shippable).
 - `composition-and-config` (**1.3.0**) — `config-validation` (M5: `JsonRpcServerConfig` DataAnnotations + source-gen `[OptionsValidator]` fail-fast) + `composition-root-complete` (H1: generic `AddJsonRpcCore<…>` registers all 5 services + concrete server + idempotency marker; consumer boilerplate removed from `example/SimpleServer/Program.cs`). Each guarded by a test; suite 90 → 112. See `openspec/changes/composition-and-config/`.
-- **Backlog** (from `AUDIT-FINDINGS.md`, ordered low-risk first): `subscription-manager-cleanup` (M2/M3/M4 — breaking `ISubscriptionManager` redesign) → `logger-message-migration` (CA1848/CA1873, ~190 sites) → registry AOT source-gen alternative.
+- `subscription-manager-cleanup` (**2.0.0**, BREAKING) — M2/M3/M4: `ISubscriptionManager` → generic `ISubscriptionManager<TEventType, TEventArgs>` (no `object`), `account` → `topic`, and `AbstractSubscriptionManager<…>` now serializes mutations through `OperationLock` (template methods over abstract `*Core`; M2). Generic `AddJsonRpcCore<…>` gains `TEventType, TEventArgs` (7 params). Suite 112 → 114. See `openspec/changes/subscription-manager-cleanup/`.
+- **Backlog** (from `AUDIT-FINDINGS.md`): `logger-message-migration` (CA1848/CA1873, ~190 sites) → registry AOT source-gen alternative → LOW-severity polish (L1-L7).
 
 ## Git
 

@@ -34,6 +34,22 @@ business logic. Every pattern below exists to keep that extension seam safe and 
 - `SemaphoreSlim` operation-locks (`AbstractSubscriptionManager.OperationLock`) must be drained
   (`WaitAsync`) before disposal, or in-flight `Release()` throws `ObjectDisposedException`.
 
+## Subscription manager (audit findings M2/M3/M4)
+
+- ✅ Shipped in `subscription-manager-cleanup` (2.0.0, BREAKING). `ISubscriptionManager<TEventType, TEventArgs>`
+  is generic (no `object` params); `Subscribe` uses `topic` (not `account`); subscribe/update take
+  `IReadOnlyCollection<TEventType>`.
+- `AbstractSubscriptionManager<TEventType, TEventArgs>` is **template method**: the public
+  `Subscribe`/`Unsubscribe`/`UpdateSubscription` are sealed-ish wrappers that run the abstract
+  `SubscribeCore`/`UnsubscribeCore`/`UpdateSubscriptionCore` under `OperationLock` (via `WithLockAsync`).
+  Derived classes implement only `*Core` and must **never** call the public `Subscribe` from inside a
+  `*Core` (the lock is non-reentrant — `SemaphoreSlim(1,1)` — so that self-deadlocks; call the sibling
+  `*Core` directly, as `DemoSubscriptionManager.UpdateSubscriptionCore` does).
+- `GetClientsForEvent` is the hot read path and intentionally takes **no** `OperationLock`; rely on a
+  thread-safe store (`AbstractSubscriptionStore<…>` uses `ReaderWriterLockSlim`) for read concurrency.
+- A mutating call after `Dispose` throws `ObjectDisposedException` (typed state error, not a raced
+  semaphore failure).
+
 ## Reflection service registry (audit finding H3 + AOT)
 
 - `AbstractRpcServiceRegistry` discovers `IRpcService` / `IClientAwareRpcService` via
