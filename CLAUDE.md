@@ -20,7 +20,7 @@ It is a **framework of abstract base classes** — consumers subclass `AbstractJ
 `[IRpcService]` discovery. The primary downstream consumer is **SignalCliNet.WsRpcServer**.
 
 - Target framework: **net10.0**. Package version lives in `Directory.Build.props`
-  (`<WsRpcServerPackageVersion>`, currently **2.3.0**) — never hardcode `<Version>` in a csproj.
+  (`<WsRpcServerPackageVersion>`, currently **2.4.0**) — never hardcode `<Version>` in a csproj.
 - Five layers: Transport (WebSocket) → Protocol (JSON-RPC 2.0) → Session → Service → Subscription.
 
 ## Build & test
@@ -89,9 +89,15 @@ Path-scoped agent instructions live in `.claude/rules/` (load conditionally when
    `IRpcServiceCatalog`** when one is injected (opt-in via `[assembly: GenerateRpcServiceCatalog]` +
    `AddGeneratedRpcServiceCatalog()`); the reflection scan is the fallback and is annotated
    `[RequiresUnreferencedCode]`/`[RequiresDynamicCode]`. ✅ Source-gen discovery shipped in
-   `registry-sourcegen-discovery` (2.3.0). Note: the **library still can't set
-   `<IsAotCompatible>true</IsAotCompatible>`** — StreamJsonRpc's `AddLocalRpcTarget` is itself
-   reflection/dynamic-proxy based (the remaining external AOT blocker); don't flip the flag.
+   `registry-sourcegen-discovery` (2.3.0); `aot-readiness` (2.4.0) then annotated `AddJsonRpcCore<…>`'s
+   generics (`[DynamicallyAccessedMembers]`) + suppressed the reflection-fallback boundary, so the
+   **discovery path is provably Native-AOT-clean** (0 IL warnings under `-p:IsAotCompatible=true`; a real
+   `PublishAot` native binary in `aot-smoke/` runs catalog-based discovery with no reflection). **Still do
+   not flip `<IsAotCompatible>true</IsAotCompatible>`**: RPC *dispatch* still uses StreamJsonRpc's
+   reflection-based `JsonRpc.AddLocalRpcTarget`. The spike (see `registry-sourcegen-discovery` notes)
+   found the AOT-clean alternative — source-generated `JsonRpc.AddLocalRpcMethod(name, delegate)` (that
+   overload carries no `[RequiresDynamicCode]`/`[RequiresUnreferencedCode]`) — but it is behavior-changing
+   (loses some `AddLocalRpcTarget` features) and is deferred to a future `aot-rpc-dispatch` capability.
 5. **No unbounded parse-failure loop.** The malformed-JSON recovery path in
    `WebSocketMessageHandler` is bounded: after `JsonRpcServerConfig.MaxConsecutiveParseFailures`
    (default 10) it closes the connection with `ProtocolError`. ✅ Shipped in `security-hardening` (1.2.0).
@@ -144,7 +150,8 @@ This repo is mid-maturation. The current floor, established by `foundation-clust
 - `logger-message-migration` (**2.1.0**) — moved all ~51 `ILogger` call sites in `src/WsRpcServer` onto source-generated `[LoggerMessage]` partials (5 new `Logging/*Log.cs`, EventId block per type), removed the repo-wide `CA1848;CA1873` `<NoWarn>` (now active in the lib; suppressed only in test/example projects), added the `LoggerMessageMigrationTests` guard. Suite 114 → 116. See `openspec/changes/logger-message-migration/`.
 - `low-severity-polish` (**2.2.0**) — M1 + the LOW band: M1 (`AbstractEventProcessor` auto-unregisters a client after N consecutive delivery failures, default 5, ctor-configurable; `HandleClientFailure` hook kept), L1 (`RegisterClient` → `TryAdd` + Warning on duplicate), L2 (`Subscriptions` → `ConcurrentBag`), L3 (`OnWsPing` `new` → `override` — NetCoreServer made the base virtual, so `new` silently bypassed our handler; guarded), L4 (enqueue-semantics XML docs), L6 (`RpcErrorException` sealed). L5/L7 already resolved/shipped. 5 new guard tests; suite 116 → 121. See `openspec/changes/low-severity-polish/`.
 - `registry-sourcegen-discovery` (**2.3.0**) — rule #4 / H3 AOT follow-up: new `src/WsRpcServer.SourceGenerator` (Roslyn `IIncrementalGenerator`) emits a reflection-free `IRpcServiceCatalog` for any consumer that opts in with `[assembly: GenerateRpcServiceCatalog]` + `AddGeneratedRpcServiceCatalog()`. `AbstractRpcServiceRegistry` prefers an injected catalog; reflection scan kept as `[RequiresUnreferencedCode]`/`[RequiresDynamicCode]` fallback. Generator packed into the nupkg (`analyzers/dotnet/cs`). 4 new guard tests (generator-driver + runtime catalog); suite 121 → 125. **Does not** flip `IsAotCompatible` — StreamJsonRpc's `AddLocalRpcTarget` is the remaining external blocker. See `openspec/changes/registry-sourcegen-discovery/`.
-- **Backlog** (from `AUDIT-FINDINGS.md`): **empty** — all 20 findings are shipped or resolved. Future AOT work is blocked upstream (StreamJsonRpc dynamic proxies), not by our code.
+- `aot-readiness` (**2.4.0**) — made the source-gen discovery path **provably Native-AOT-clean**: `[DynamicallyAccessedMembers(PublicConstructors)]` on `AddJsonRpcCore<…>`'s 5 service generics (clears IL2091) + honest `[UnconditionalSuppressMessage]` at the reflection-fallback boundary (IL2026/IL3050/IL3000, justified by "catalog is the AOT path"). Result: **0 IL warnings** under `-p:IsAotCompatible=true`, and a real `dotnet publish -p:PublishAot=true` native binary (`aot-smoke/`) runs catalog-based discovery with no reflection (exit 0). Does **not** flip `IsAotCompatible` (RPC dispatch still uses StreamJsonRpc reflection — see rule #4). See `openspec/changes/aot-readiness/`.
+- **Backlog** (from `AUDIT-FINDINGS.md`): **empty** — all 20 findings shipped/resolved. The only open AOT item is `aot-rpc-dispatch` (source-gen `AddLocalRpcMethod` to replace `AddLocalRpcTarget`), a behavior-changing follow-up pending sign-off — see rule #4. The StreamJsonRpc-replacement question was researched (spike) and rejected: the in-library `AddLocalRpcMethod` path is the cheaper, lower-risk route.
 
 ## Git
 

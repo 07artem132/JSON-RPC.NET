@@ -36,7 +36,7 @@
       $(WsRpcServerPackageVersion); hardcoded <Version> there was 1.0.0.
       Bumping = одне місце.
     -->
-    <WsRpcServerPackageVersion>2.3.0</WsRpcServerPackageVersion>
+    <WsRpcServerPackageVersion>2.4.0</WsRpcServerPackageVersion>
   </PropertyGroup>
 
 </Project>

@@ -63,11 +63,21 @@ business logic. Every pattern below exists to keep that extension seam safe and 
   = derives `IClientAwareRpcService`) and reports `WSRPC001` on duplicate implementations.
 - The reflection fallback (`BuildServiceTypeCacheFromReflection`) keeps the thread-safe lazy cache
   (volatile + double-checked `Lock`) and the multi-impl Warning (don't silently `FirstOrDefault`), and is
-  annotated `[RequiresUnreferencedCode]`/`[RequiresDynamicCode]` (IL2026/IL3050) — those fire only when a
-  consumer enables trimming, guiding them to the catalog.
-- **Do NOT set `<IsAotCompatible>true</IsAotCompatible>` on the library.** Even with the catalog, StreamJsonRpc's
-  `JsonRpc.AddLocalRpcTarget(...)` (used in `RegisterServices`) is dynamic-proxy/reflection based — that is
-  the remaining external AOT blocker, not our discovery code. The source-gen catalog closes the part we own.
+  annotated `[RequiresUnreferencedCode]`/`[RequiresDynamicCode]`. The dispatcher `BuildServiceTypeCache` and
+  `GetTargetAssemblies` carry `[UnconditionalSuppressMessage]` (IL2026/IL3050/IL3000) justified by "the
+  catalog is the AOT path; reflection runs only when no catalog is registered" — so a catalog consumer's
+  trim/AOT publish is warning-free. ✅ `aot-readiness` (2.4.0).
+- **The discovery path is provably Native-AOT-clean.** `AddJsonRpcCore<…>`'s 5 service generics carry
+  `[DynamicallyAccessedMembers(PublicConstructors)]`; the library shows **0 IL warnings** under
+  `-p:IsAotCompatible=true`; and `aot-smoke/` is a real `PublishAot` native binary that runs catalog-based
+  discovery (exit 0, no reflection). Re-measure with
+  `dotnet build src/WsRpcServer/WsRpcServer.csproj -p:IsAotCompatible=true -p:TreatWarningsAsErrors=false`.
+- **Still do NOT set `<IsAotCompatible>true</IsAotCompatible>` on the library.** RPC *dispatch* in
+  `RegisterServices` still calls StreamJsonRpc's `JsonRpc.AddLocalRpcTarget(...)` (reflection/dynamic proxy).
+  A spike confirmed the in-library AOT-clean alternative is `JsonRpc.AddLocalRpcMethod(name, delegate)` (no
+  AOT attributes on that overload); source-generating those per method is the deferred, behavior-changing
+  `aot-rpc-dispatch` capability. Replacing StreamJsonRpc wholesale was researched and rejected (its server
+  surface we use is narrow, and the `AddLocalRpcMethod` route is far cheaper).
 
 ## Transport / parse-recovery (audit finding H2)
 

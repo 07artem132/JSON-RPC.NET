@@ -163,6 +163,11 @@ public abstract class AbstractRpcServiceRegistry(
     /// Може бути перевизначений у похідних класах для обмеження кількості збірок
     /// або додавання зовнішніх збірок.
     /// </remarks>
+    [UnconditionalSuppressMessage("SingleFile", "IL3000",
+        Justification =
+            "Частина рефлексійного fallback'у виявлення сервісів. У single-file/AOT-сценаріях споживач " +
+            "реєструє source-генерований IRpcServiceCatalog (AddGeneratedRpcServiceCatalog), і цей шлях не " +
+            "виконується; порожній Location лише відсіює складки й не призводить до збою.")]
     protected virtual Assembly[] GetTargetAssemblies()
     {
         return AppDomain.CurrentDomain.GetAssemblies()
@@ -218,6 +223,14 @@ public abstract class AbstractRpcServiceRegistry(
     /// <see cref="GenerateRpcServiceCatalogAttribute"/> і викликав <c>AddGeneratedRpcServiceCatalog</c>),
     /// виявлення сервісів стає trim/AOT-сумісним. Інакше — fallback на рефлексію (стара поведінка).
     /// </remarks>
+    [UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification =
+            "Каталог — основний шлях (AOT-безпечний); рефлексійний fallback викликається ЛИШЕ коли " +
+            "IRpcServiceCatalog не зареєстровано. Trim/AOT-споживачі реєструють source-генерований каталог " +
+            "(AddGeneratedRpcServiceCatalog), тож ця гілка для них недосяжна. Сам метод-fallback анотовано " +
+            "[RequiresUnreferencedCode], тож виклик з нього без каталогу залишається свідомим вибором споживача.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050",
+        Justification = "Див. IL2026 вище: рефлексійний fallback виконується лише без зареєстрованого каталогу.")]
     private ServiceTypeCache BuildServiceTypeCache()
     {
         if (ServiceProvider.GetService(typeof(IRpcServiceCatalog)) is IRpcServiceCatalog catalog)

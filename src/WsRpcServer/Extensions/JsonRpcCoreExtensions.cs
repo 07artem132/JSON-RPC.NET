@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Net;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -91,7 +92,14 @@ public static class JsonRpcCoreExtensions
     /// виконуються через <c>TryAdd*</c>, тож виклик ідемпотентний і не перетирає вже наявних
     /// реєстрацій (споживач може зареєструвати власну реалізацію до виклику цього методу).
     /// </remarks>
-    public static IServiceCollection AddJsonRpcCore<TServer, TSession, TEventProcessor, TSubscriptionManager, TRegistry, TEventType, TEventArgs>(
+    public static IServiceCollection AddJsonRpcCore<
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TServer,
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TSession,
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TEventProcessor,
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TSubscriptionManager,
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] TRegistry,
+        TEventType,
+        TEventArgs>(
         this IServiceCollection services,
         Action<JsonRpcServerConfig>? configureOptions = null)
         where TServer : AbstractJsonRpcServer
