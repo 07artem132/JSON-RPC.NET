@@ -1,4 +1,6 @@
-﻿namespace WsRpcServer.Core;
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace WsRpcServer.Core;
 
 /// <summary>
 /// Конфігурація для JSON-RPC сервера.
@@ -24,6 +26,7 @@ public record JsonRpcServerConfig
     /// Використання "0.0.0.0" дозволяє серверу приймати з'єднання на всіх мережевих інтерфейсах.
     /// Для безпеки у виробничому середовищі можна обмежити до конкретного інтерфейсу.
     /// </remarks>
+    [Required(AllowEmptyStrings = false)]
     public string Host { get; set; } = "0.0.0.0";
 
     /// <summary>
@@ -34,6 +37,7 @@ public record JsonRpcServerConfig
     /// Використання порту нижче 1024 зазвичай потребує підвищених привілеїв у Unix-подібних системах.
     /// Порт 9000 є достатньо високим для використання без спеціальних привілеїв.
     /// </remarks>
+    [Range(1, 65535)]
     public int Port { get; set; } = 9000;
 
     /// <summary>
@@ -45,6 +49,7 @@ public record JsonRpcServerConfig
     /// споживання пам'яті. Значення встановлено досить високим для підтримки великих повідомлень,
     /// але в реальних сценаріях може бути зменшене.
     /// </remarks>
+    [Range(1, int.MaxValue)]
     public int MaxMessageSizeBytes { get; set; } = 100 * 1024 * 1024;
 
     /// <summary>
@@ -56,6 +61,7 @@ public record JsonRpcServerConfig
     /// противотиску (backpressure). Якщо клієнт не встигає обробляти сповіщення,
     /// найстаріші будуть відкидатися для запобігання переповненню пам'яті.
     /// </remarks>
+    [Range(1, int.MaxValue)]
     public int NotificationQueueSize { get; set; } = 1000;
 
     /// <summary>
@@ -67,6 +73,7 @@ public record JsonRpcServerConfig
     /// Коли буфер запису перевищує цей поріг, запис призупиняється до того моменту,
     /// коли читач обробить частину даних, що зменшує ризик вичерпання пам'яті.
     /// </remarks>
+    [Range(1, int.MaxValue)]
     public int PipeThresholdBytes { get; set; } = 1024 * 1024;
 
     /// <summary>
@@ -91,5 +98,6 @@ public record JsonRpcServerConfig
     /// <see cref="System.Net.WebSockets.WebSocketCloseStatus.ProtocolError"/>. Лічильник скидається після
     /// кожного успішного розбору повідомлення.
     /// </remarks>
+    [Range(1, int.MaxValue)]
     public int MaxConsecutiveParseFailures { get; set; } = 10;
 }

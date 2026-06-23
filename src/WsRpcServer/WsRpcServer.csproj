@@ -24,6 +24,13 @@
 
     <ItemGroup>
       <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.3" />
+      <!--
+        M5/H1: options-pattern валідація конфігурації + композиційний корінь.
+        Прямий референс (не транзитивний) потрібен, щоб увімкнувся source-generator
+        [OptionsValidator] (analyzer'и не успадковуються транзитивно). Лінія 9.0.x
+        узгоджена з Microsoft.Extensions.Logging.Abstractions вище.
+      -->
+      <PackageReference Include="Microsoft.Extensions.Options" Version="9.0.3" />
       <PackageReference Include="NetCoreServer" Version="8.0.7" />
       <PackageReference Include="StreamJsonRpc" Version="2.21.69" />
       <!--

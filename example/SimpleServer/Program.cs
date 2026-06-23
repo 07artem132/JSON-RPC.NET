@@ -46,31 +46,21 @@ namespace SimpleServer
                 builder.SetMinimumLevel(LogLevel.Debug);
             });
 
-            // Add JSON-RPC core services
-            services.AddJsonRpcCore(options =>
+            // Register our business service
+            services.AddSingleton<ICalculatorService, CalculatorService>();
+
+            // Add JSON-RPC core services + concrete implementations in one call.
+            // The composition root now lives in the library (finding H1): no more hand-wiring
+            // five services and constructing the server manually in consumer code.
+            services.AddJsonRpcCore<
+                DemoJsonRpcServer,
+                DemoJsonRpcSession,
+                DemoEventProcessor,
+                DemoSubscriptionManager,
+                DemoServiceRegistry>(options =>
             {
                 options.Host = "0.0.0.0";
                 options.Port = 9000;
-            });
-
-            // Register our services
-            
-            services.AddSingleton<ICalculatorService, CalculatorService>();
-            services.AddSingleton<DemoEventProcessor>();
-            services.AddSingleton<IEventProcessor>(sp => sp.GetRequiredService<DemoEventProcessor>());
-            services.AddSingleton<DemoSubscriptionManager>();
-            services.AddSingleton<ISubscriptionManager>(sp => sp.GetRequiredService<DemoSubscriptionManager>());
-            services.AddSingleton<IRpcServiceRegistry, DemoServiceRegistry>();
-            services.AddTransient<DemoJsonRpcSession>();
-            services.AddSingleton<DemoJsonRpcServer>(sp =>
-            {
-                var config = sp.GetRequiredService<JsonRpcServerConfig>();
-                var ipAddress = IPAddress.Parse(config.Host);
-                return new DemoJsonRpcServer(
-                    ipAddress,
-                    config.Port,
-                    sp,
-                    sp.GetRequiredService<ILogger<DemoJsonRpcServer>>());
             });
 
             // Build service provider

@@ -599,6 +599,32 @@
             кожного успішного розбору повідомлення.
             </remarks>
         </member>
+        <member name="T:WsRpcServer.Core.JsonRpcServerConfigValidator">
+             <summary>
+             Валідатор конфігурації <see cref="T:WsRpcServer.Core.JsonRpcServerConfig"/>, згенерований під час компіляції.
+             </summary>
+             <remarks>
+             Атрибут <see cref="T:Microsoft.Extensions.Options.OptionsValidatorAttribute"/> на порожньому partial-класі вказує
+             source-generator'у <c>Microsoft.Extensions.Options</c> згенерувати реалізацію
+             <see cref="T:Microsoft.Extensions.Options.IValidateOptions`1"/> на основі DataAnnotations-атрибутів
+             (<c>[Range]</c>/<c>[Required]</c>), що позначають властивості <see cref="T:WsRpcServer.Core.JsonRpcServerConfig"/>.
+             Згенерований код не використовує рефлексію (на відміну від <c>ValidateDataAnnotations()</c>),
+             тож лишається AOT-сумісним (M5).
+            
+             Крос-польові правила без DataAnnotation-атрибута (наприклад, додатний
+             <see cref="P:WsRpcServer.Core.JsonRpcServerConfig.NotificationTimeout"/>, який є <see cref="T:System.TimeSpan"/>)
+             додаються через <c>.Validate(...)</c> у композиційному корені
+             <see cref="T:WsRpcServer.Extensions.JsonRpcCoreExtensions"/>.
+             </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.JsonRpcServerConfigValidator.Validate(System.String,WsRpcServer.Core.JsonRpcServerConfig)">
+            <summary>
+            Validates a specific named options instance (or all when <paramref name="name"/> is <see langword="null" />).
+            </summary>
+            <param name="name">The name of the options instance being validated.</param>
+            <param name="options">The options instance.</param>
+            <returns>Validation result.</returns>
+        </member>
         <member name="T:WsRpcServer.Events.AbstractEventProcessor">
             <summary>
             Абстрактний базовий клас для обробників подій.
@@ -970,13 +996,52 @@
             Методи розширення для реєстрації JSON-RPC сервісів у контейнері DI.
             </summary>
         </member>
+        <member name="T:WsRpcServer.Extensions.JsonRpcCoreExtensions.JsonRpcCoreMarker">
+            <summary>
+            Sentinel-маркер для ідемпотентності: гарантує, що базова реєстрація конфігурації
+            виконується рівно один раз навіть при повторних викликах <see cref="M:WsRpcServer.Extensions.JsonRpcCoreExtensions.AddJsonRpcCore(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{WsRpcServer.Core.JsonRpcServerConfig})"/>
+            (H1 — патерн маркера реєстрації, як у SignalCli.NET).
+            </summary>
+        </member>
         <member name="M:WsRpcServer.Extensions.JsonRpcCoreExtensions.AddJsonRpcCore(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{WsRpcServer.Core.JsonRpcServerConfig})">
             <summary>
-            Додає основні JSON-RPC сервіси до колекції сервісів.
+            Додає базову конфігурацію JSON-RPC сервера до колекції сервісів (через options-pattern
+            з fail-fast валідацією). Реєстрація конкретних реалізацій сервісів виконується через
+            узагальнену перевантажену версію
+            <see cref="M:WsRpcServer.Extensions.JsonRpcCoreExtensions.AddJsonRpcCore``5(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{WsRpcServer.Core.JsonRpcServerConfig})"/>.
             </summary>
             <param name="services">Колекція сервісів.</param>
             <param name="configureOptions">Опціональна дія для налаштування сервера.</param>
             <returns>Колекція сервісів для ланцюжка викликів.</returns>
+            <remarks>
+            Конфігурація реєструється через <see cref="T:WsRpcServer.Core.JsonRpcServerConfig"/> у двох ролях:
+            (1) як <c>IOptions&lt;JsonRpcServerConfig&gt;</c> з валідацією
+            (<see cref="T:WsRpcServer.Core.JsonRpcServerConfigValidator"/> + крос-польове правило для
+            <see cref="P:WsRpcServer.Core.JsonRpcServerConfig.NotificationTimeout"/>); (2) як прямо резолвабельний
+            <see cref="T:WsRpcServer.Core.JsonRpcServerConfig"/> (значення з валідованих опцій) — для зворотної сумісності
+            з кодом, що ін'єктить конфіг напряму. Повторний виклик ідемпотентний (M5/H1).
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Extensions.JsonRpcCoreExtensions.AddJsonRpcCore``5(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{WsRpcServer.Core.JsonRpcServerConfig})">
+            <summary>
+            Додає основні JSON-RPC сервіси разом із конкретними реалізаціями сервера, сесії, обробника
+            подій, менеджера підписок та реєстру сервісів. Це повний композиційний корінь — споживачу
+            більше не потрібно вручну зв'язувати п'ять сервісів і конструювати сервер (H1).
+            </summary>
+            <typeparam name="TServer">Конкретний тип сервера (нащадок <see cref="T:WsRpcServer.Core.AbstractJsonRpcServer"/>).</typeparam>
+            <typeparam name="TSession">Конкретний тип сесії (нащадок <see cref="T:WsRpcServer.Sessions.AbstractJsonRpcSession"/>).</typeparam>
+            <typeparam name="TEventProcessor">Конкретний тип обробника подій (<see cref="T:WsRpcServer.Events.IEventProcessor"/>).</typeparam>
+            <typeparam name="TSubscriptionManager">Конкретний тип менеджера підписок (<see cref="T:WsRpcServer.Core.ISubscriptionManager"/>).</typeparam>
+            <typeparam name="TRegistry">Конкретний тип реєстру RPC-сервісів (<see cref="T:WsRpcServer.Services.IRpcServiceRegistry"/>).</typeparam>
+            <param name="services">Колекція сервісів.</param>
+            <param name="configureOptions">Опціональна дія для налаштування сервера.</param>
+            <returns>Колекція сервісів для ланцюжка викликів.</returns>
+            <remarks>
+            Обробник подій та менеджер підписок реєструються за патерном "один екземпляр — дві ролі":
+            конкретний тип як singleton, а інтерфейс резолвиться як той самий екземпляр. Усі реєстрації
+            виконуються через <c>TryAdd*</c>, тож виклик ідемпотентний і не перетирає вже наявних
+            реєстрацій (споживач може зареєструвати власну реалізацію до виклику цього методу).
+            </remarks>
         </member>
         <member name="T:WsRpcServer.Services.AbstractRpcServiceRegistry">
             <summary>
