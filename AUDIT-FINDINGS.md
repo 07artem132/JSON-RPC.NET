@@ -17,7 +17,8 @@
 - **`subscription-manager-cleanup` (2.0.0, BREAKING):** ✅ **M2** (base now uses `OperationLock` via template `*Core` methods), ✅ **M3** (`account` → `topic`), ✅ **M4** (`ISubscriptionManager<TEventType, TEventArgs>` generic, no `object`). Guarded by 2 new tests; suite 112 → 114.
 - **`logger-message-migration` (2.1.0):** closed the deferred `CA1848;CA1873` suppression left over from `warnings-cleanup` — all ~51 `ILogger` call sites in `src/WsRpcServer` moved onto source-generated `[LoggerMessage]` partials (5 new `Logging/*Log.cs`, EventId block per type). Repo-wide `<NoWarn>` removed; both perf rules now active in the lib (suppressed only in test/example projects). Guarded by `LoggerMessageMigrationTests`; suite 114 → 116.
 - **`low-severity-polish` (2.2.0):** ✅ **M1** (`AbstractEventProcessor` built-in consecutive-failure counter → auto-unregister a persistently-failing client + Warning; `HandleClientFailure` hook kept), ✅ **L1** (`RegisterClient` uses `TryAdd` + Warning on duplicate), ✅ **L2** (`Subscriptions` → `ConcurrentBag`), ✅ **L3** (`OnWsPing`: `new` → `override` — NetCoreServer made the base virtual, so `new` was silently bypassing our handler; guarded), ✅ **L4** (enqueue-semantics XML docs), ✅ **L6** (`RpcErrorException` sealed). L5 was already resolved (file rewritten in `composition-and-config`); L7 already shipped (this repo now has `CLAUDE.md` + `.claude/rules/` + `openspec/`). Guarded by 5 new tests; suite 116 → 121.
-- **Still open:** registry AOT source-gen discovery alternative (rule #4 / H3 follow-up) — the lone remaining backlog item.
+- **`registry-sourcegen-discovery` (2.3.0):** ✅ **H3 AOT follow-up** — new `WsRpcServer.SourceGenerator` (Roslyn `IIncrementalGenerator`) emits a reflection-free `IRpcServiceCatalog` for consumers that opt in (`[assembly: GenerateRpcServiceCatalog]` + `AddGeneratedRpcServiceCatalog()`); `AbstractRpcServiceRegistry` prefers it, reflection scan kept as `[RequiresUnreferencedCode]`/`[RequiresDynamicCode]` fallback; generator packed into the nupkg. Guarded by 4 new tests (generator-driver + runtime catalog); suite 121 → 125. ⚠ The library still does **not** set `<IsAotCompatible>true</IsAotCompatible>`: StreamJsonRpc's `AddLocalRpcTarget` (dynamic proxy / reflection) is the remaining external blocker — documented, not ours to fix.
+- **Still open:** **none** — all 20 findings are shipped or resolved.
 
 ---
 
@@ -89,7 +90,7 @@ public static IServiceCollection AddJsonRpcCore<TServer, TSession, TEventProc, T
 
 ---
 
-### H3. Reflection-based service discovery — AOT-incompatible + thread-unsafe lazy cache  ✅ SHIPPED (thread-safety + multi-impl warning; `security-hardening`, 1.2.0 — AOT still open)
+### H3. Reflection-based service discovery — AOT-incompatible + thread-unsafe lazy cache  ✅ SHIPPED (thread-safety + multi-impl warning: `security-hardening`, 1.2.0; source-gen discovery alternative: `registry-sourcegen-discovery`, 2.3.0 — full `IsAotCompatible` still blocked upstream by StreamJsonRpc)
 
 **Where:** `src/WsRpcServer/Services/AbstractRpcServiceRegistry.cs:60-72` (lazy init) + `:151-194` (assembly scan) + `:212-266` (cache build).
 

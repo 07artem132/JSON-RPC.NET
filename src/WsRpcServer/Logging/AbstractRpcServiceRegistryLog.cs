@@ -36,4 +36,8 @@ internal static partial class AbstractRpcServiceRegistryLog
 
     [LoggerMessage(EventId = 1307, Level = LogLevel.Error, Message = "Помилка при скануванні типів RPC-сервісів")]
     public static partial void ScanError(ILogger logger, Exception ex);
+
+    [LoggerMessage(EventId = 1308, Level = LogLevel.Debug,
+        Message = "Використано source-генерований каталог RPC-сервісів ({Count} сервісів) — без рефлексії")]
+    public static partial void CatalogUsed(ILogger logger, int count);
 }

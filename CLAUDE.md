@@ -20,7 +20,7 @@ It is a **framework of abstract base classes** — consumers subclass `AbstractJ
 `[IRpcService]` discovery. The primary downstream consumer is **SignalCliNet.WsRpcServer**.
 
 - Target framework: **net10.0**. Package version lives in `Directory.Build.props`
-  (`<WsRpcServerPackageVersion>`, currently **2.2.0**) — never hardcode `<Version>` in a csproj.
+  (`<WsRpcServerPackageVersion>`, currently **2.3.0**) — never hardcode `<Version>` in a csproj.
 - Five layers: Transport (WebSocket) → Protocol (JSON-RPC 2.0) → Session → Service → Subscription.
 
 ## Build & test
@@ -43,7 +43,7 @@ dotnet test  tests/WsRpcServer.Tests/WsRpcServer.Tests.csproj --collect:"XPlat C
 - `Core/AbstractJsonRpcServer` — NetCoreServer `WsServer` subclass; accepts connections, creates sessions.
 - `Sessions/AbstractJsonRpcSession` — per-connection lifecycle; owns the StreamJsonRpc instance + a `CancellationTokenSource`.
 - `Transport/WebSocketMessageHandler` — `Stream` adapter feeding WS frames to StreamJsonRpc; framing + parse-recovery loop.
-- `Services/AbstractRpcServiceRegistry` — reflection-based discovery of `IRpcService` / `IClientAwareRpcService` implementations.
+- `Services/AbstractRpcServiceRegistry` — discovery of `IRpcService` / `IClientAwareRpcService` implementations: prefers a source-generated `IRpcServiceCatalog` (AOT-safe), falls back to a reflection scan. The generator lives in `src/WsRpcServer.SourceGenerator` and ships inside the nupkg as an analyzer.
 - `Events/AbstractEventProcessor` — fan-out of server→client notifications; per-client handler registry.
 - `Subscriptions/AbstractSubscriptionManager` + `Core/AbstractSubscriptionStore` — subscription bookkeeping.
 - `Core/JsonRpcServerConfig` — record holding `Host`/`Port`/`MaxMessageSizeBytes`/`NotificationQueueSize`.
@@ -85,8 +85,13 @@ Path-scoped agent instructions live in `.claude/rules/` (load conditionally when
 4. **Reflection registry must be thread-safe + AOT-honest.** `AbstractRpcServiceRegistry`'s lazy
    type cache is built once via thread-safe init (volatile + double-checked `Lock`), and multiple
    implementations of one interface log a Warning instead of silent first-wins. ✅ Thread-safety
-   shipped in `security-hardening` (1.2.0). The reflection scan is **not AOT-compatible** — do not
-   set `<IsAotCompatible>true</IsAotCompatible>` without a source-gen alternative (AOT still open).
+   shipped in `security-hardening` (1.2.0). The registry now **prefers a source-generated
+   `IRpcServiceCatalog`** when one is injected (opt-in via `[assembly: GenerateRpcServiceCatalog]` +
+   `AddGeneratedRpcServiceCatalog()`); the reflection scan is the fallback and is annotated
+   `[RequiresUnreferencedCode]`/`[RequiresDynamicCode]`. ✅ Source-gen discovery shipped in
+   `registry-sourcegen-discovery` (2.3.0). Note: the **library still can't set
+   `<IsAotCompatible>true</IsAotCompatible>`** — StreamJsonRpc's `AddLocalRpcTarget` is itself
+   reflection/dynamic-proxy based (the remaining external AOT blocker); don't flip the flag.
 5. **No unbounded parse-failure loop.** The malformed-JSON recovery path in
    `WebSocketMessageHandler` is bounded: after `JsonRpcServerConfig.MaxConsecutiveParseFailures`
    (default 10) it closes the connection with `ProtocolError`. ✅ Shipped in `security-hardening` (1.2.0).
@@ -126,8 +131,8 @@ Path-scoped agent instructions live in `.claude/rules/` (load conditionally when
 This repo is mid-maturation. The current floor, established by `foundation-cluster-1` (→ 1.1.0):
 
 - **Build hygiene:** 0 warnings, `TreatWarningsAsErrors=true` on lib + tests; shared `Directory.Build.props`.
-- **Tests:** unit suite green (**121**). Adding a feature that touches an open audit finding SHOULD add the matching regression-guard test (see `.claude/rules/audit-debt.md`).
-- **Process:** non-trivial work goes through OpenSpec (`openspec/changes/<name>/`); `AUDIT-FINDINGS.md` is the prioritized backlog (4 HIGH / 9 MEDIUM / 7 LOW).
+- **Tests:** unit suite green (**125**). Adding a feature that touches an open audit finding SHOULD add the matching regression-guard test (see `.claude/rules/audit-debt.md`).
+- **Process:** non-trivial work goes through OpenSpec (`openspec/changes/<name>/`); `AUDIT-FINDINGS.md` is the prioritized backlog (4 HIGH / 9 MEDIUM / 7 LOW — **all now shipped/resolved**).
 
 ## Implemented / planned
 
@@ -138,7 +143,8 @@ This repo is mid-maturation. The current floor, established by `foundation-clust
 - `subscription-manager-cleanup` (**2.0.0**, BREAKING) — M2/M3/M4: `ISubscriptionManager` → generic `ISubscriptionManager<TEventType, TEventArgs>` (no `object`), `account` → `topic`, and `AbstractSubscriptionManager<…>` now serializes mutations through `OperationLock` (template methods over abstract `*Core`; M2). Generic `AddJsonRpcCore<…>` gains `TEventType, TEventArgs` (7 params). Suite 112 → 114. See `openspec/changes/subscription-manager-cleanup/`.
 - `logger-message-migration` (**2.1.0**) — moved all ~51 `ILogger` call sites in `src/WsRpcServer` onto source-generated `[LoggerMessage]` partials (5 new `Logging/*Log.cs`, EventId block per type), removed the repo-wide `CA1848;CA1873` `<NoWarn>` (now active in the lib; suppressed only in test/example projects), added the `LoggerMessageMigrationTests` guard. Suite 114 → 116. See `openspec/changes/logger-message-migration/`.
 - `low-severity-polish` (**2.2.0**) — M1 + the LOW band: M1 (`AbstractEventProcessor` auto-unregisters a client after N consecutive delivery failures, default 5, ctor-configurable; `HandleClientFailure` hook kept), L1 (`RegisterClient` → `TryAdd` + Warning on duplicate), L2 (`Subscriptions` → `ConcurrentBag`), L3 (`OnWsPing` `new` → `override` — NetCoreServer made the base virtual, so `new` silently bypassed our handler; guarded), L4 (enqueue-semantics XML docs), L6 (`RpcErrorException` sealed). L5/L7 already resolved/shipped. 5 new guard tests; suite 116 → 121. See `openspec/changes/low-severity-polish/`.
-- **Backlog** (from `AUDIT-FINDINGS.md`): registry AOT source-gen discovery alternative (rule #4 / H3 follow-up) — the lone remaining item; needs a source generator (and likely a public-API addition) to replace the reflection scan so `<IsAotCompatible>true</IsAotCompatible>` can be set.
+- `registry-sourcegen-discovery` (**2.3.0**) — rule #4 / H3 AOT follow-up: new `src/WsRpcServer.SourceGenerator` (Roslyn `IIncrementalGenerator`) emits a reflection-free `IRpcServiceCatalog` for any consumer that opts in with `[assembly: GenerateRpcServiceCatalog]` + `AddGeneratedRpcServiceCatalog()`. `AbstractRpcServiceRegistry` prefers an injected catalog; reflection scan kept as `[RequiresUnreferencedCode]`/`[RequiresDynamicCode]` fallback. Generator packed into the nupkg (`analyzers/dotnet/cs`). 4 new guard tests (generator-driver + runtime catalog); suite 121 → 125. **Does not** flip `IsAotCompatible` — StreamJsonRpc's `AddLocalRpcTarget` is the remaining external blocker. See `openspec/changes/registry-sourcegen-discovery/`.
+- **Backlog** (from `AUDIT-FINDINGS.md`): **empty** — all 20 findings are shipped or resolved. Future AOT work is blocked upstream (StreamJsonRpc dynamic proxies), not by our code.
 
 ## Git
 

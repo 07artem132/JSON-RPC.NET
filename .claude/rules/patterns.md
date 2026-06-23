@@ -50,17 +50,24 @@ business logic. Every pattern below exists to keep that extension seam safe and 
 - A mutating call after `Dispose` throws `ObjectDisposedException` (typed state error, not a raced
   semaphore failure).
 
-## Reflection service registry (audit finding H3 + AOT)
+## Service registry: source-gen catalog first, reflection fallback (audit finding H3 + AOT)
 
-- `AbstractRpcServiceRegistry` discovers `IRpcService` / `IClientAwareRpcService` via
-  `AppDomain.CurrentDomain.GetAssemblies()` + `GetExportedTypes()`. This runs once per connection, so:
-  - The lazy type cache MUST be built thread-safely (`Lazy<T>` with `ExecutionAndPublication`, or
-    `Interlocked.CompareExchange`). `_cache ??= Build()` is a race when two connections start together.
-  - When >1 implementation of the same RPC interface is found, **log a Warning** rather than silently
-    taking `FirstOrDefault` — the consumer should disambiguate via DI.
-- The reflection scan is **not AOT-compatible** (IL2026/IL3050). Do **not** set
-  `<IsAotCompatible>true</IsAotCompatible>` on this project without first providing a source-gen
-  discovery alternative — otherwise an AOT-publishing consumer gets warnings/trim failures.
+- ✅ Shipped `registry-sourcegen-discovery` (2.3.0). `AbstractRpcServiceRegistry.BuildServiceTypeCache`
+  first resolves `IRpcServiceCatalog` from `ServiceProvider`. If present (consumer opted in with
+  `[assembly: GenerateRpcServiceCatalog]` + `AddGeneratedRpcServiceCatalog()`), the cache is built from
+  the **compile-time** catalog — **no reflection**. Otherwise it falls back to the reflection scan.
+- The generator lives in `src/WsRpcServer.SourceGenerator` (`netstandard2.0`, `IIncrementalGenerator`),
+  is referenced by the library `OutputItemType="Analyzer" ReferenceOutputAssembly="false"`, and is packed
+  into the nupkg under `analyzers/dotnet/cs` so NuGet consumers get it automatically. It mirrors the
+  reflection convention (any non-abstract class implementing an `IRpcService`-derived interface; client-aware
+  = derives `IClientAwareRpcService`) and reports `WSRPC001` on duplicate implementations.
+- The reflection fallback (`BuildServiceTypeCacheFromReflection`) keeps the thread-safe lazy cache
+  (volatile + double-checked `Lock`) and the multi-impl Warning (don't silently `FirstOrDefault`), and is
+  annotated `[RequiresUnreferencedCode]`/`[RequiresDynamicCode]` (IL2026/IL3050) — those fire only when a
+  consumer enables trimming, guiding them to the catalog.
+- **Do NOT set `<IsAotCompatible>true</IsAotCompatible>` on the library.** Even with the catalog, StreamJsonRpc's
+  `JsonRpc.AddLocalRpcTarget(...)` (used in `RegisterServices`) is dynamic-proxy/reflection based — that is
+  the remaining external AOT blocker, not our discovery code. The source-gen catalog closes the part we own.
 
 ## Transport / parse-recovery (audit finding H2)
 

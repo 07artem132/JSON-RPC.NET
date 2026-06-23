@@ -1,4 +1,5 @@
-﻿using System.Reflection;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
@@ -208,22 +209,73 @@ public abstract class AbstractRpcServiceRegistry(
     protected abstract IEnumerable<string> GetAdditionalAssemblyPrefixes();
 
     /// <summary>
-    /// Будує кеш типів сервісів, скануючи збірки застосунку.
+    /// Будує кеш типів сервісів: спершу пробує reflection-free <see cref="IRpcServiceCatalog"/>
+    /// (згенерований на етапі компіляції), і лише за його відсутності — рефлексійне сканування збірок.
+    /// </summary>
+    /// <returns>Кеш типів сервісів.</returns>
+    /// <remarks>
+    /// Якщо в DI зареєстровано <see cref="IRpcServiceCatalog"/> (споживач позначив збірку
+    /// <see cref="GenerateRpcServiceCatalogAttribute"/> і викликав <c>AddGeneratedRpcServiceCatalog</c>),
+    /// виявлення сервісів стає trim/AOT-сумісним. Інакше — fallback на рефлексію (стара поведінка).
+    /// </remarks>
+    private ServiceTypeCache BuildServiceTypeCache()
+    {
+        if (ServiceProvider.GetService(typeof(IRpcServiceCatalog)) is IRpcServiceCatalog catalog)
+        {
+            return BuildServiceTypeCacheFromCatalog(catalog);
+        }
+
+        return BuildServiceTypeCacheFromReflection();
+    }
+
+    /// <summary>
+    /// Будує кеш із reflection-free каталогу, згенерованого на етапі компіляції (AOT-сумісно).
+    /// </summary>
+    /// <param name="catalog">Каталог виявлених сервісів.</param>
+    /// <returns>Кеш типів сервісів.</returns>
+    private ServiceTypeCache BuildServiceTypeCacheFromCatalog(IRpcServiceCatalog catalog)
+    {
+        var regularServices = new List<Type>();
+        var clientAwareServices = new List<(Type InterfaceType, Type ImplType)>();
+
+        foreach (var descriptor in catalog.Services)
+        {
+            if (descriptor.IsClientAware)
+            {
+                clientAwareServices.Add((descriptor.InterfaceType, descriptor.ImplementationType));
+            }
+            else
+            {
+                regularServices.Add(descriptor.InterfaceType);
+            }
+        }
+
+        AbstractRpcServiceRegistryLog.CatalogUsed(Logger, catalog.Services.Count);
+        return new ServiceTypeCache(regularServices, clientAwareServices);
+    }
+
+    /// <summary>
+    /// Будує кеш типів сервісів, скануючи збірки застосунку через рефлексію (fallback).
     /// </summary>
     /// <returns>Кеш типів сервісів.</returns>
     /// <remarks>
     /// Цей метод використовує рефлексію для виявлення:
     /// 1. Інтерфейсів, що наслідуються від IRpcService або IClientAwareRpcService
     /// 2. Класів, що реалізують ці інтерфейси
-    /// 
+    ///
     /// Потім він розподіляє знайдені сервіси на дві категорії:
     /// - Звичайні RPC-сервіси (IRpcService)
     /// - Клієнт-залежні RPC-сервіси (IClientAwareRpcService)
-    /// 
-    /// Весь цей аналіз виконується один раз при створенні кешу,
-    /// що підвищує продуктивність при подальших реєстраціях сервісів.
+    ///
+    /// Шлях НЕ сумісний із trim/AOT (GetExportedTypes/IsAssignableFrom — IL2026/IL3050); для AOT
+    /// зареєструй <see cref="IRpcServiceCatalog"/> через <c>AddGeneratedRpcServiceCatalog</c>.
     /// </remarks>
-    private ServiceTypeCache BuildServiceTypeCache()
+    [RequiresUnreferencedCode(
+        "Рефлексійне виявлення RPC-сервісів несумісне з trimming. Використовуй source-генерований " +
+        "IRpcServiceCatalog ([assembly: GenerateRpcServiceCatalog] + AddGeneratedRpcServiceCatalog).")]
+    [RequiresDynamicCode(
+        "Рефлексійне сканування збірок несумісне з Native AOT. Використовуй source-генерований IRpcServiceCatalog.")]
+    private ServiceTypeCache BuildServiceTypeCacheFromReflection()
     {
         var regularServices = new List<Type>();
         var clientAwareServices = new List<(Type InterfaceType, Type ImplType)>();

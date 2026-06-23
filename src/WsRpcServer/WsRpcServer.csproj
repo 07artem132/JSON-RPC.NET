@@ -43,4 +43,20 @@
       <PackageReference Include="MessagePack" Version="2.5.302" />
     </ItemGroup>
 
+    <!--
+      Source-генератор виявлення RPC-сервісів (registry-sourcegen-discovery, 2.3.0).
+      OutputItemType=Analyzer → застосовується як генератор; ReferenceOutputAssembly=false →
+      його DLL НЕ потрапляє у рантайм-залежності бібліотеки.
+    -->
+    <ItemGroup>
+      <ProjectReference Include="..\WsRpcServer.SourceGenerator\WsRpcServer.SourceGenerator.csproj"
+                        OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    </ItemGroup>
+
+    <!-- Пакуємо DLL генератора у nupkg (analyzers/dotnet/cs), щоб NuGet-споживачі отримували його автоматично. -->
+    <ItemGroup>
+      <None Include="..\WsRpcServer.SourceGenerator\bin\$(Configuration)\netstandard2.0\WsRpcServer.SourceGenerator.dll"
+            Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+    </ItemGroup>
+
 </Project>

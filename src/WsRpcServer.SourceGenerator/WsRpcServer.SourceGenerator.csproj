@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Аналізатори/генератори МУСЯТЬ бути netstandard2.0, щоб завантажуватись у хост компілятора. -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <!-- Не публікуємо як звичайний пакет/референс — DLL пакується в analyzers/dotnet/cs у JSON-RPC.NET. -->
+    <IsPackable>false</IsPackable>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <!-- Генератор не логує через [LoggerMessage] і не є частиною ліб-API — perf-правила тут недоречні. -->
+    <!-- RS2008 (analyzer release tracking) — інфраструктура для пакетів аналізаторів із багатьма
+         еволюційними правилами; для одного внутрішнього codegen-діагностика (WSRPC001) це надмірність. -->
+    <NoWarn>$(NoWarn);CA1848;CA1873;RS2008</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

@@ -30,6 +30,14 @@ paths:
   `CA1707` (underscores in identifiers) is suppressed on the **test** csproj only (xUnit naming). Don't
   add blanket suppressions to hide a real warning — fix the warning or suppress at the call site with a
   justification.
+- **Source generator project (`src/WsRpcServer.SourceGenerator`).** Targets `netstandard2.0`
+  (analyzers MUST), `IsRoslynComponent=true`, references `Microsoft.CodeAnalysis.CSharp` with
+  `PrivateAssets=all`, and is **not** independently packable (`IsPackable=false`). The library references
+  it `OutputItemType="Analyzer" ReferenceOutputAssembly="false"` (applies it as a generator without adding
+  a runtime dependency) and packs its DLL into the nupkg via
+  `<None Include="..\WsRpcServer.SourceGenerator\bin\$(Configuration)\netstandard2.0\WsRpcServer.SourceGenerator.dll" Pack="true" PackagePath="analyzers/dotnet/cs" />`.
+  Project-reference consumers (e.g. `example/*`) do **not** get analyzers transitively — only NuGet
+  consumers do; the generator is validated by `RpcServiceCatalogGeneratorTests` (drives `CSharpGeneratorDriver`).
 - **GitHub Actions: SHA-pin every `uses:` and copy SHAs from existing workflows in this repo**
   (`.github/workflows/publish-nuget.yml`), not from memory or docs. A 1-char typo in an action SHA
   fast-fails with "Unable to resolve action". The publish workflow installs the **net10 SDK** and the

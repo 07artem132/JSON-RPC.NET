@@ -1253,21 +1253,40 @@
         </member>
         <member name="M:WsRpcServer.Services.AbstractRpcServiceRegistry.BuildServiceTypeCache">
             <summary>
-            Будує кеш типів сервісів, скануючи збірки застосунку.
+            Будує кеш типів сервісів: спершу пробує reflection-free <see cref="T:WsRpcServer.Services.IRpcServiceCatalog"/>
+            (згенерований на етапі компіляції), і лише за його відсутності — рефлексійне сканування збірок.
             </summary>
             <returns>Кеш типів сервісів.</returns>
             <remarks>
-            Цей метод використовує рефлексію для виявлення:
-            1. Інтерфейсів, що наслідуються від IRpcService або IClientAwareRpcService
-            2. Класів, що реалізують ці інтерфейси
-            
-            Потім він розподіляє знайдені сервіси на дві категорії:
-            - Звичайні RPC-сервіси (IRpcService)
-            - Клієнт-залежні RPC-сервіси (IClientAwareRpcService)
-            
-            Весь цей аналіз виконується один раз при створенні кешу,
-            що підвищує продуктивність при подальших реєстраціях сервісів.
+            Якщо в DI зареєстровано <see cref="T:WsRpcServer.Services.IRpcServiceCatalog"/> (споживач позначив збірку
+            <see cref="T:WsRpcServer.Services.GenerateRpcServiceCatalogAttribute"/> і викликав <c>AddGeneratedRpcServiceCatalog</c>),
+            виявлення сервісів стає trim/AOT-сумісним. Інакше — fallback на рефлексію (стара поведінка).
             </remarks>
+        </member>
+        <member name="M:WsRpcServer.Services.AbstractRpcServiceRegistry.BuildServiceTypeCacheFromCatalog(WsRpcServer.Services.IRpcServiceCatalog)">
+            <summary>
+            Будує кеш із reflection-free каталогу, згенерованого на етапі компіляції (AOT-сумісно).
+            </summary>
+            <param name="catalog">Каталог виявлених сервісів.</param>
+            <returns>Кеш типів сервісів.</returns>
+        </member>
+        <member name="M:WsRpcServer.Services.AbstractRpcServiceRegistry.BuildServiceTypeCacheFromReflection">
+             <summary>
+             Будує кеш типів сервісів, скануючи збірки застосунку через рефлексію (fallback).
+             </summary>
+             <returns>Кеш типів сервісів.</returns>
+             <remarks>
+             Цей метод використовує рефлексію для виявлення:
+             1. Інтерфейсів, що наслідуються від IRpcService або IClientAwareRpcService
+             2. Класів, що реалізують ці інтерфейси
+            
+             Потім він розподіляє знайдені сервіси на дві категорії:
+             - Звичайні RPC-сервіси (IRpcService)
+             - Клієнт-залежні RPC-сервіси (IClientAwareRpcService)
+            
+             Шлях НЕ сумісний із trim/AOT (GetExportedTypes/IsAssignableFrom — IL2026/IL3050); для AOT
+             зареєструй <see cref="T:WsRpcServer.Services.IRpcServiceCatalog"/> через <c>AddGeneratedRpcServiceCatalog</c>.
+             </remarks>
         </member>
         <member name="T:WsRpcServer.Services.AbstractRpcServiceRegistry.ServiceTypeCache">
             <summary>
@@ -1306,6 +1325,19 @@
             <remarks>
             Для цих сервісів створюються нові екземпляри з передачею clientId
             у конструктор під час реєстрації.
+            </remarks>
+        </member>
+        <member name="T:WsRpcServer.Services.GenerateRpcServiceCatalogAttribute">
+            <summary>
+            Позначає збірку як таку, для якої source-генератор має згенерувати <see cref="T:WsRpcServer.Services.IRpcServiceCatalog"/>
+            (compile-time виявлення всіх реалізацій <see cref="T:WsRpcServer.Services.IRpcService"/>) + DI-розширення
+            <c>AddGeneratedRpcServiceCatalog</c>.
+            </summary>
+            <remarks>
+            Opt-in: без цього атрибута генератор нічого не випромінює, а реєстр використовує рефлексійне
+            сканування (стара поведінка). Додай <c>[assembly: GenerateRpcServiceCatalog]</c> у будь-якому файлі
+            збірки споживача й виклич <c>services.AddGeneratedRpcServiceCatalog()</c>, щоб виявлення сервісів
+            стало reflection-free (trim/AOT-сумісним).
             </remarks>
         </member>
         <member name="T:WsRpcServer.Services.IClientAwareRpcService">
@@ -1362,6 +1394,26 @@
             в JSON-RPC системі для виклику їх методів з клієнтської сторони.
             </remarks>
         </member>
+        <member name="T:WsRpcServer.Services.IRpcServiceCatalog">
+             <summary>
+             Reflection-free каталог RPC-сервісів, виявлених на етапі компіляції.
+             </summary>
+             <remarks>
+             Реалізація цього інтерфейсу генерується source-генератором у збірці споживача, коли та позначена
+             <see cref="T:WsRpcServer.Services.GenerateRpcServiceCatalogAttribute"/>. Якщо каталог зареєстровано в DI,
+             <see cref="T:WsRpcServer.Services.AbstractRpcServiceRegistry"/> бере перелік сервісів саме з нього й НЕ виконує
+             рефлексійного сканування збірок (<c>GetExportedTypes</c>/<c>IsAssignableFrom</c> — IL2026/IL3050).
+             Це робить виявлення сервісів сумісним із trim/AOT.
+            
+             Якщо каталог не зареєстровано, реєстр повертається до рефлексійного сканування (стара поведінка) —
+             тож наявні споживачі працюють без змін.
+             </remarks>
+        </member>
+        <member name="P:WsRpcServer.Services.IRpcServiceCatalog.Services">
+            <summary>
+            Перелік усіх виявлених RPC-сервісів (інтерфейс + реалізація + ознака клієнт-залежності).
+            </summary>
+        </member>
         <member name="T:WsRpcServer.Services.IRpcServiceRegistry">
             <summary>
             Інтерфейс для реєстру RPC-сервісів.
@@ -1399,6 +1451,47 @@
             
             Внутрішньо використовує StreamJsonRpc.JsonRpc.AddLocalRpcTarget для реєстрації сервісів.
             </remarks>
+        </member>
+        <member name="T:WsRpcServer.Services.RpcServiceDescriptor">
+            <summary>
+            Описує один RPC-сервіс для реєстрації: інтерфейс, його реалізація та чи є він клієнт-залежним.
+            Це reflection-free представлення результату виявлення сервісів — заповнюється або
+            source-генератором (compile-time, AOT-сумісно), або рефлексійним скануванням (fallback).
+            </summary>
+            <param name="InterfaceType">Тип RPC-інтерфейсу (нащадок <see cref="T:WsRpcServer.Services.IRpcService"/>).</param>
+            <param name="ImplementationType">Конкретний клас, що реалізує <paramref name="InterfaceType"/>.</param>
+            <param name="IsClientAware">
+            <c>true</c>, якщо інтерфейс наслідується від <see cref="T:WsRpcServer.Services.IClientAwareRpcService"/> — такий сервіс
+            створюється для кожного клієнта (через <c>ActivatorUtilities</c> з передачею clientId), а не
+            резолвиться як спільний екземпляр з DI.
+            </param>
+        </member>
+        <member name="M:WsRpcServer.Services.RpcServiceDescriptor.#ctor(System.Type,System.Type,System.Boolean)">
+            <summary>
+            Описує один RPC-сервіс для реєстрації: інтерфейс, його реалізація та чи є він клієнт-залежним.
+            Це reflection-free представлення результату виявлення сервісів — заповнюється або
+            source-генератором (compile-time, AOT-сумісно), або рефлексійним скануванням (fallback).
+            </summary>
+            <param name="InterfaceType">Тип RPC-інтерфейсу (нащадок <see cref="T:WsRpcServer.Services.IRpcService"/>).</param>
+            <param name="ImplementationType">Конкретний клас, що реалізує <paramref name="InterfaceType"/>.</param>
+            <param name="IsClientAware">
+            <c>true</c>, якщо інтерфейс наслідується від <see cref="T:WsRpcServer.Services.IClientAwareRpcService"/> — такий сервіс
+            створюється для кожного клієнта (через <c>ActivatorUtilities</c> з передачею clientId), а не
+            резолвиться як спільний екземпляр з DI.
+            </param>
+        </member>
+        <member name="P:WsRpcServer.Services.RpcServiceDescriptor.InterfaceType">
+            <summary>Тип RPC-інтерфейсу (нащадок <see cref="T:WsRpcServer.Services.IRpcService"/>).</summary>
+        </member>
+        <member name="P:WsRpcServer.Services.RpcServiceDescriptor.ImplementationType">
+            <summary>Конкретний клас, що реалізує <paramref name="InterfaceType"/>.</summary>
+        </member>
+        <member name="P:WsRpcServer.Services.RpcServiceDescriptor.IsClientAware">
+            <summary>
+            <c>true</c>, якщо інтерфейс наслідується від <see cref="T:WsRpcServer.Services.IClientAwareRpcService"/> — такий сервіс
+            створюється для кожного клієнта (через <c>ActivatorUtilities</c> з передачею clientId), а не
+            резолвиться як спільний екземпляр з DI.
+            </summary>
         </member>
         <member name="T:WsRpcServer.Sessions.AbstractJsonRpcSession">
             <summary>

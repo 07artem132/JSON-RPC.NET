@@ -13,7 +13,7 @@ findings (M6 warnings, M7 README org refs) are **shipped**. Still open:
 |---|---|---|---|
 | ✅ | H1 | `AddJsonRpcCore` registers only config; consumer hand-wires 5 services; no idempotency guard → shipped `composition-and-config` (1.3.0) | `composition-root-complete` |
 | ✅ | H2 | Unbounded malformed-JSON recovery loop = single-connection CPU-burn DoS → shipped `security-hardening` (1.2.0) | `parse-failure-throttle` |
-| ✅ | H3 | Reflection registry thread-unsafe lazy cache + silent multi-impl loss → shipped `security-hardening` (1.2.0); AOT still open | `service-registry-thread-safety` |
+| ✅ | H3 | Reflection registry thread-unsafe lazy cache + silent multi-impl loss → shipped `security-hardening` (1.2.0); source-gen discovery alternative shipped `registry-sourcegen-discovery` (2.3.0) | `service-registry-thread-safety` + `registry-sourcegen-discovery` |
 | ✅ | H4 | `Dispose()` doesn't cancel CTS first → shipped `security-hardening` (1.2.0) | `dispose-cancellation` |
 | ✅ | M2/M3/M4 | Subscription base: unused lock; `account` leaks domain; `object` event types lose type-safety → shipped `subscription-manager-cleanup` (2.0.0, BREAKING) | `subscription-manager-cleanup` |
 | ✅ | M5 | `JsonRpcServerConfig` has no `[Range]`/`[Required]` validation → shipped `composition-and-config` (1.3.0) | `config-validation` |
@@ -22,10 +22,12 @@ findings (M6 warnings, M7 README org refs) are **shipped**. Still open:
 | ✅ | M1 | Fire-and-forget notification failures lost; broken client never removed → shipped `low-severity-polish` (2.2.0) | `event-processor-resilience` |
 | ✅ | L1-L7 | overwrite-without-warning, non-concurrent list, `new` vs `override`, misleading async sig, sealed exception → shipped `low-severity-polish` (2.2.0); L5/L7 already resolved | polish |
 
-**Only the registry AOT source-gen discovery alternative remains open** (rule #4 / H3 follow-up): the
-reflection scan in `AbstractRpcServiceRegistry` is not AOT-compatible (IL2026/IL3050). Closing it needs a
-source-generator-based discovery path (and likely a small public-API addition) before
-`<IsAotCompatible>true</IsAotCompatible>` can be set. Everything else in `AUDIT-FINDINGS.md` is shipped.
+**The backlog is empty** — all 20 `AUDIT-FINDINGS.md` items are shipped or resolved. The H3 AOT
+follow-up shipped in `registry-sourcegen-discovery` (2.3.0): `WsRpcServer.SourceGenerator` emits a
+reflection-free `IRpcServiceCatalog` and `AbstractRpcServiceRegistry` prefers it (reflection kept as an
+annotated fallback). The library still does **not** set `<IsAotCompatible>true</IsAotCompatible>` — that
+is blocked **upstream** by StreamJsonRpc's `AddLocalRpcTarget` (dynamic proxy), not by our code; revisit
+only if StreamJsonRpc ships an AOT-safe target-attach path.
 
 **Rule for new PRs:** if your change touches the code behind an open finding, fix the finding (and add
 its guard test) in the same change rather than building new code on top of the debt.

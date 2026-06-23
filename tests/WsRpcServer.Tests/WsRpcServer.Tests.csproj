@@ -24,6 +24,8 @@
         <!-- Конкретний DI-контейнер + Logging для тестів композиційного кореня (H1) та валідації (M5). -->
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.3" />
         <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.3" />
+        <!-- Roslyn — щоб ганяти source-генератор через CSharpGeneratorDriver (registry-sourcegen-discovery). -->
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0"/>
         <PackageReference Include="Moq" Version="4.20.72" />
         <PackageReference Include="xunit" Version="2.9.2"/>
@@ -36,6 +38,8 @@
 
     <ItemGroup>
       <ProjectReference Include="..\..\src\WsRpcServer\WsRpcServer.csproj" />
+      <!-- Звичайний референс (НЕ analyzer) — щоб інстанціювати генератор у тестах напряму. -->
+      <ProjectReference Include="..\..\src\WsRpcServer.SourceGenerator\WsRpcServer.SourceGenerator.csproj" />
     </ItemGroup>
 
 </Project>
