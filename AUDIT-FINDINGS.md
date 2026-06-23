@@ -8,6 +8,14 @@
 
 ---
 
+## Shipped status
+
+- **`foundation-cluster-1` (1.1.0):** M6 (warnings → 0), M7 (README org refs).
+- **`security-hardening` (1.2.0):** ✅ **H2** (parse-failure throttle), ✅ **H3** (registry thread-safety + multi-impl warning), ✅ **H4** (cancel-before-dispose), ✅ **M9** (CanRead/CanWrite on dispose), plus the transitive **MessagePack** advisory (GHSA-hv8m-jj95-wg3x) pinned out. Each HIGH finding has a regression-guard test; build now passes with the NuGet audit **enabled**. Unit suite 83 → 90.
+- **Still open:** H1 (composition root), M1–M5, M8 (CI), L1–L7. See the table below.
+
+---
+
 ## Severity legend
 
 | Tag | Meaning |
@@ -59,7 +67,7 @@ public static IServiceCollection AddJsonRpcCore<TServer, TSession, TEventProc, T
 
 ---
 
-### H2. JSON-парсер CPU-burn vector — `FindNextJsonDelimiter` під malformed stream'ом
+### H2. JSON-парсер CPU-burn vector — `FindNextJsonDelimiter` під malformed stream'ом  ✅ SHIPPED (`security-hardening`, 1.2.0)
 
 **Where:** `src/WsRpcServer/Transport/WebSocketMessageHandler.cs:104-211` (ReadCoreAsync + recovery).
 
@@ -76,7 +84,7 @@ public static IServiceCollection AddJsonRpcCore<TServer, TSession, TEventProc, T
 
 ---
 
-### H3. Reflection-based service discovery — AOT-incompatible + thread-unsafe lazy cache
+### H3. Reflection-based service discovery — AOT-incompatible + thread-unsafe lazy cache  ✅ SHIPPED (thread-safety + multi-impl warning; `security-hardening`, 1.2.0 — AOT still open)
 
 **Where:** `src/WsRpcServer/Services/AbstractRpcServiceRegistry.cs:60-72` (lazy init) + `:151-194` (assembly scan) + `:212-266` (cache build).
 
@@ -94,7 +102,7 @@ public static IServiceCollection AddJsonRpcCore<TServer, TSession, TEventProc, T
 
 ---
 
-### H4. `Dispose()` patterns lose in-flight tasks — no cancellation signaling before disposal
+### H4. `Dispose()` patterns lose in-flight tasks — no cancellation signaling before disposal  ✅ SHIPPED (`security-hardening`, 1.2.0)
 
 **Where:**
 - `src/WsRpcServer/Sessions/AbstractJsonRpcSession.cs:318-327` — `Dispose(bool)`: `Cts.Dispose()` без `Cts.Cancel()`.
@@ -249,7 +257,7 @@ public interface ISubscriptionManager<TEventType, TArgs>
 
 ---
 
-### M9. `WebSocketMessageHandler.CanRead`/`CanWrite` hardcoded `true` — survive Dispose
+### M9. `WebSocketMessageHandler.CanRead`/`CanWrite` hardcoded `true` — survive Dispose  ✅ SHIPPED (`security-hardening`, 1.2.0)
 
 **Where:** `src/WsRpcServer/Transport/WebSocketMessageHandler.cs:51-52`.
 

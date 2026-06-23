@@ -22,6 +22,6 @@
 - [x] 4.3 Guard tests: `Parallel.For` first-use builds the cache exactly once; multi-impl logs Warning.
 
 ## 5. Close-out
-- [ ] 5.1 Bump `<WsRpcServerPackageVersion>` 1.1.0 → 1.2.0.
-- [ ] 5.2 `AUDIT-FINDINGS.md` + `CLAUDE.md`: move H2/H3/H4 to shipped + cite this change.
-- [ ] 5.3 Full `dotnet build` (audit on) + `dotnet test` green.
+- [x] 5.1 Bump `<WsRpcServerPackageVersion>` 1.1.0 → 1.2.0.
+- [x] 5.2 `AUDIT-FINDINGS.md` + `CLAUDE.md`: move H2/H3/H4/M9 to shipped + cite this change.
+- [x] 5.3 Full `dotnet build` (audit on) → 0 warnings; `dotnet test` → 90/90 green. (Also pinned MessagePack in `example/SimpleClient` to clear its NU1903 warning.)

@@ -20,7 +20,7 @@ It is a **framework of abstract base classes** — consumers subclass `AbstractJ
 `[IRpcService]` discovery. The primary downstream consumer is **SignalCliNet.WsRpcServer**.
 
 - Target framework: **net10.0**. Package version lives in `Directory.Build.props`
-  (`<WsRpcServerPackageVersion>`, currently **1.1.0**) — never hardcode `<Version>` in a csproj.
+  (`<WsRpcServerPackageVersion>`, currently **1.2.0**) — never hardcode `<Version>` in a csproj.
 - Five layers: Transport (WebSocket) → Protocol (JSON-RPC 2.0) → Session → Service → Subscription.
 
 ## Build & test
@@ -77,37 +77,37 @@ Path-scoped agent instructions live in `.claude/rules/` (load conditionally when
    future capability.
 3. **Disposal signals cancellation first.** Classes holding a `CancellationTokenSource` for
    background work (`AbstractJsonRpcSession`, `AbstractEventProcessor`) MUST `Cts.Cancel()` and
-   await/drain the in-flight task **before** `Cts.Dispose()`. Prefer `IAsyncDisposable` for types
-   with async cleanup (the SignalCli.NET `IJsonRpcClient` pattern). This is open audit finding **H4**.
+   drain the in-flight task **before** `Cts.Dispose()`; `AbstractSubscriptionManager` drains its
+   `OperationLock` before disposing it. ✅ Shipped in `security-hardening` (1.2.0), guarded by tests.
 4. **Reflection registry must be thread-safe + AOT-honest.** `AbstractRpcServiceRegistry`'s lazy
-   type cache is built once via thread-safe init (`Lazy<T>` / `Interlocked`), and the reflection
-   scan (`GetAssemblies`/`GetExportedTypes`) is **not AOT-compatible** — do not set
-   `<IsAotCompatible>true</IsAotCompatible>` without providing a source-gen alternative. Open
-   findings **H3** (thread-safety) and AOT.
+   type cache is built once via thread-safe init (volatile + double-checked `Lock`), and multiple
+   implementations of one interface log a Warning instead of silent first-wins. ✅ Thread-safety
+   shipped in `security-hardening` (1.2.0). The reflection scan is **not AOT-compatible** — do not
+   set `<IsAotCompatible>true</IsAotCompatible>` without a source-gen alternative (AOT still open).
 5. **No unbounded parse-failure loop.** The malformed-JSON recovery path in
-   `WebSocketMessageHandler` must be bounded (close the connection after N consecutive parse
-   failures) — an attacker can otherwise CPU-burn a single connection. Open finding **H2**.
+   `WebSocketMessageHandler` is bounded: after `JsonRpcServerConfig.MaxConsecutiveParseFailures`
+   (default 10) it closes the connection with `ProtocolError`. ✅ Shipped in `security-hardening` (1.2.0).
 6. **Composition root stays in the library, not the consumer.** `AddJsonRpcCore` should register
    the core services + concrete server so consumers don't hand-wire 5 services. Open finding **H1**.
 7. **Comments and log messages are written in Ukrainian** — match the surrounding code when editing.
 
-> Rules 3-6 describe invariants that are **not yet shipped** — they are the open HIGH findings in
-> `AUDIT-FINDINGS.md`. They are listed here so new code does not deepen the debt while it is being
-> addressed (one OpenSpec change per cluster). When a finding is fixed + guarded by a test, move its
-> bullet to a "shipped" state and cite the change.
+> Rules 3-5 shipped in `security-hardening` (1.2.0) — each with a regression-guard test (see
+> `tests/WsRpcServer.Tests/{Transport,Sessions,Events,Subscriptions,Services}`). Rule 6 (H1) is still
+> open. When you fix a remaining finding, add its guard test and move its bullet to a shipped state.
 
 ## Maturity baseline (do not regress below this)
 
 This repo is mid-maturation. The current floor, established by `foundation-cluster-1` (→ 1.1.0):
 
 - **Build hygiene:** 0 warnings, `TreatWarningsAsErrors=true` on lib + tests; shared `Directory.Build.props`.
-- **Tests:** unit suite green (~83). Adding a feature that touches an open audit finding SHOULD add the matching regression-guard test (see `.claude/rules/audit-debt.md`).
+- **Tests:** unit suite green (**90**). Adding a feature that touches an open audit finding SHOULD add the matching regression-guard test (see `.claude/rules/audit-debt.md`).
 - **Process:** non-trivial work goes through OpenSpec (`openspec/changes/<name>/`); `AUDIT-FINDINGS.md` is the prioritized backlog (4 HIGH / 9 MEDIUM / 7 LOW).
 
 ## Implemented / planned
 
 - `foundation-cluster-1` (**1.1.0**) — build hygiene: `readme-org-fix`, `directory-build-props`, `warnings-cleanup` (439→0), `treat-warnings-errors`. See `openspec/changes/foundation-cluster-1/`.
-- **Backlog** (from `AUDIT-FINDINGS.md`, ordered low-risk first): `config-validation` (M5) → `composition-root-complete` (H1) → `dispose-async-pattern` (H4) → `service-registry-thread-safety` (H3) → `parse-failure-throttle` (H2) → `subscription-manager-cleanup` (M2/M3/M4) → `ci-bootstrap` (M8) → `logger-message-migration`.
+- `security-hardening` (**1.2.0**) — the 4 critical items: `dependency-vuln-messagepack` (MessagePack advisory), `parse-failure-throttle` (H2 + M9), `dispose-cancellation` (H4), `service-registry-thread-safety` (H3). Each guarded by a test; build passes with NuGet audit on; suite 83 → 90. See `openspec/changes/security-hardening/`.
+- **Backlog** (from `AUDIT-FINDINGS.md`, ordered low-risk first): `config-validation` (M5) → `composition-root-complete` (H1) → `subscription-manager-cleanup` (M2/M3/M4) → `ci-bootstrap` (M8) → `logger-message-migration` → registry AOT source-gen alternative.
 
 ## Git
 
