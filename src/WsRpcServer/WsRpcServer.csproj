@@ -26,6 +26,14 @@
       <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.3" />
       <PackageReference Include="NetCoreServer" Version="8.0.7" />
       <PackageReference Include="StreamJsonRpc" Version="2.21.69" />
+      <!--
+        Прямий pin транзитивної залежності StreamJsonRpc → MessagePack:
+        2.5.192 має high-severity вразливість (GHSA-hv8m-jj95-wg3x / NU1903).
+        2.5.302 — остання патчена версія у тій самій 2.5.x-лінії (бінарно
+        сумісна зі StreamJsonRpc 2.21.69). Прибрати pin можна лише коли
+        StreamJsonRpc сам почне тягнути непатчену MessagePack ≥ 2.5.198.
+      -->
+      <PackageReference Include="MessagePack" Version="2.5.302" />
     </ItemGroup>
 
 </Project>
