@@ -40,6 +40,18 @@
 4. Service Layer — реєстрація та виклик RPC‑методів.
 5. Subscription Layer — система підписок та сповіщень. 
 
+## 📚 Документація
+
+Поглиблений per-тип reference (точки розширення, інваріанти, приклади) живе у [`docs/`](docs/README.md):
+[композиція+конфіг](docs/api/composition-and-config.md) ·
+[сервер+сесія](docs/api/server-and-session.md) ·
+[сервіси+реєстр](docs/api/services-and-registry.md) ·
+[підписки](docs/api/subscriptions.md) ·
+[події](docs/api/events.md) ·
+[помилки](docs/api/errors.md) ·
+[end-to-end приклад](docs/examples/echo-server.md) ·
+[Native-AOT](docs/aot.md).
+
 ## 🚀 Особливості
 
 - 🚀 **Висока продуктивність** — Асинхронна комунікація з ефективним транспортним шаром
