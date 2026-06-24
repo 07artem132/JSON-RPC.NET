@@ -163,7 +163,7 @@ public abstract class AbstractJsonRpcSession(
 
         try
         {
-            await foreach (var notification in NotificationChannel.Reader.ReadAllAsync(cancellationToken))
+            await foreach (var notification in NotificationChannel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
             {
                 if (JsonRpc == null)
                 {
@@ -179,7 +179,7 @@ public abstract class AbstractJsonRpcSession(
 
                     // Використовуємо StreamJsonRpc для правильного форматування JSON-RPC сповіщень
                     await JsonRpc.NotifyAsync(notification.Method, notification.Arguments)
-                        .WaitAsync(timeoutCts.Token);
+                        .WaitAsync(timeoutCts.Token).ConfigureAwait(false);
 
                     AbstractJsonRpcSessionLog.NotificationSent(Logger, notification.Method, Id);
                 }

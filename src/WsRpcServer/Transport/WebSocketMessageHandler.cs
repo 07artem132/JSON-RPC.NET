@@ -269,7 +269,7 @@ public sealed class WebSocketMessageHandler : MessageHandlerBase, IJsonRpcMessag
             }
 
             // Використовуємо NetCoreServer для надсилання бінарних даних
-            await _session.SendBinaryDataAsync(writer.WrittenMemory);
+            await _session.SendBinaryDataAsync(writer.WrittenMemory).ConfigureAwait(false);
 
             WebSocketMessageHandlerLog.MessageSent(_logger, writer.WrittenCount, _session.Id);
         }
