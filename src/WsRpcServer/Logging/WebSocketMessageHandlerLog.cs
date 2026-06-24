@@ -80,4 +80,8 @@ internal static partial class WebSocketMessageHandlerLog
     [LoggerMessage(EventId = 1217, Level = LogLevel.Debug,
         Message = "Утилізація WebSocketMessageHandler для сесії {SessionId}")]
     public static partial void Disposing(ILogger logger, Guid sessionId);
+
+    [LoggerMessage(EventId = 1218, Level = LogLevel.Warning,
+        Message = "Спроба обробки отриманих даних у вже утилізованому WebSocketMessageHandler для сесії {SessionId}")]
+    public static partial void ReceiveAfterDispose(ILogger logger, Guid sessionId);
 }

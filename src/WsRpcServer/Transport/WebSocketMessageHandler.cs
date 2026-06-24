@@ -71,6 +71,16 @@ public sealed class WebSocketMessageHandler : MessageHandlerBase, IJsonRpcMessag
     /// </summary>
     public ValueTask<FlushResult> ProcessReceivedDataAsync(ReadOnlyMemory<byte> buffer)
     {
+        // R2-M2: вхідний шлях отримує явну dispose-перевірку — симетрично до WriteCoreAsync.
+        // Раніше запис у вже завершений (через Dispose → _writer.Complete()) PipeWriter кидав
+        // InvalidOperationException ("Writing is not allowed...") — витік внутрішньої деталі pipe.
+        // Кидаємо ідіоматичний ObjectDisposedException, як і шлях запису, замість випадкового типу.
+        if (_disposed)
+        {
+            WebSocketMessageHandlerLog.ReceiveAfterDispose(_logger, _session.Id);
+            throw new ObjectDisposedException(nameof(WebSocketMessageHandler));
+        }
+
         try
         {
             WebSocketMessageHandlerLog.ProcessingReceivedData(_logger, buffer.Length, _session.Id);
