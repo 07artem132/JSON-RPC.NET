@@ -32,7 +32,10 @@ _(none)_ — no functional/security/corruption-class findings on this pass. The 
 
 ## 🟡 MEDIUM
 
-### R2-M1. Three library `await`s missing `.ConfigureAwait(false)` — captures consumer SynchronizationContext
+### R2-M1. Three library `await`s missing `.ConfigureAwait(false)` — captures consumer SynchronizationContext  ✅ SHIPPED
+
+> **Статус:** виправлено. 3 сайти отримали `.ConfigureAwait(false)`; guard `ConfigureAwaitConventionTests`
+> (Roslyn-парсинг кожного `.cs` у `src/WsRpcServer`) ловить весь клас регресії. Suite 128 → 129.
 
 **Where:**
 - `src/WsRpcServer/Transport/WebSocketMessageHandler.cs:272` — `await _session.SendBinaryDataAsync(writer.WrittenMemory);`
@@ -54,7 +57,13 @@ _(none)_ — no functional/security/corruption-class findings on this pass. The 
 
 ---
 
-### R2-M2. `ProcessReceivedDataAsync` writes to the pipe without a disposal guard — teardown race vs. `Dispose`
+### R2-M2. `ProcessReceivedDataAsync` writes to the pipe without a disposal guard — teardown race vs. `Dispose`  ✅ SHIPPED
+
+> **Статус:** виправлено. Додано явний dispose-guard, що кидає ідіоматичний `ObjectDisposedException`
+> (симетрично до `WriteCoreAsync`) замість `InvalidOperationException`, який раніше випадково витікав із
+> завершеного `PipeWriter`. Існуючий тест оновлено: `...ThrowsInvalidOperationException` →
+> `...ThrowsObjectDisposedException`. **Уточнення проти первинного формулювання:** шлях не був повністю
+> «незахищеним» — він кидав (і це тестувалося), але неідіоматичним типом; фікс — про коректний тип винятку.
 
 **Where:** `src/WsRpcServer/Transport/WebSocketMessageHandler.cs:72-89` (запис у `_writer`) проти `:289-305` (`Dispose` → `_writer.Complete()`).
 
@@ -73,23 +82,33 @@ if (_disposed)
 
 ---
 
-### R2-M3. `MaxSubscriptionsPerClient` + `ClientSubscriptionCounts` declared & documented as a per-client cap, but never enforced by the base
+### R2-M3. ~~`MaxSubscriptionsPerClient` + `ClientSubscriptionCounts` declared but never enforced by the base~~  ❌ ВІДКЛИКАНО (false positive)
 
-**Where:** `src/WsRpcServer/Subscriptions/AbstractSubscriptionManager.cs:56` (`ClientSubscriptionCounts`) + `:65` (`MaxSubscriptionsPerClient`). Жодне з них не читається/не пишеться у `src/**` (підтверджено `grep` — лише XMLDoc + скомпільований DLL).
-
-**Що:** база надає `protected ConcurrentDictionary<Guid,int> ClientSubscriptionCounts` і `protected int MaxSubscriptionsPerClient` (default 10, ctor-параметр), а XMLDoc на рядку 61-63 прямо обіцяє: *"Це обмеження запобігає зловживанню ресурсами сервера окремими клієнтами."* Але template-потік `Subscribe` → `SubscribeCore` (`:112`, `:155`) **ніде** не інкрементує лічильник і **ніде** не перевіряє ліміт. Механізм існує лише як видимість.
-
-**Чому:** це той самий foot-gun, що Round-1 **M2** (оголошений-але-невикористаний `OperationLock`): похідний клас, який довіряє базовій документації, припускає, що per-client cap enforced базою — і не реалізує власну перевірку → **необмежена кількість підписок на клієнта = вектор вичерпання ресурсів** (memory-growth DoS). Round-1 M2 виправили саме тому, що "база оголошує гарантію, якої не виконує" тренує споживачів довіряти неправді.
-
-**Fix:** обрати одне:
-- **(a)** реалізувати enforcement у базі: у `SubscribeCore`-обгортці (або новому `protected` хелпері під `OperationLock`) інкрементувати `ClientSubscriptionCounts[clientId]`, кидати типізований виняток (`RpcErrorException`) при перевищенні `MaxSubscriptionsPerClient`, декрементувати в `Unsubscribe`; **або**
-- **(b)** прибрати обидва члени з бази (як зробили для невикористаного локу в M2) і перенести лічбу/ліміт у похідні класи, прибравши обіцянку з XMLDoc.
-
-**Regression-guard:** якщо (a) — тест, що підписує клієнта `MaxSubscriptionsPerClient + 1` разів і assert'ить виняток + що лічильник декрементується при `Unsubscribe`. Якщо (b) — reflection-guard, що `AbstractSubscriptionManager` не оголошує невикористаних `protected` member'ів (симетрично до M2-guard).
+> **Статус: ВІДКЛИКАНО при верифікації перед реалізацією.** Первинне формулювання спиралося на
+> `grep` лише по `src/` цього репо й зробило висновок, що `ClientSubscriptionCounts`/`MaxSubscriptionsPerClient`
+> «ніде не використовуються». Це **помилка неповного grep'у** (саме той патерн, від якого застерігає
+> sibling-правило SignalCli.NET `audit-debt.md §0.5 «cite-and-read, not cite-and-trust»`).
+>
+> **Реальність:** обидва члени — навмисні `protected` будівельні блоки Template-Method, і **реальний
+> downstream-споживач їх використовує**: `SignalCliNet.WsRpcServer/Subscriptions/SubscriptionManager.cs`
+> читає `ClientSubscriptionCounts.GetValueOrDefault(clientId) >= MaxSubscriptionsPerClient` (рядок 46),
+> кидає при перевищенні (50) і підтримує лічильник через `AddOrUpdate` (110, 152). Тобто база свідомо
+> віддає enforcement похідному класу (як і документує `SubscribeCore`: *«похідні класи реалізують
+> логіку перевірки обмеження»*), а тестовий дубль `TestSubscriptionManager.SubscribeCore` так само читає
+> `MaxSubscriptionsPerClient` (рядок 43) і має тест `Subscribe_ExceedsMaxSubscriptions_ThrowsException`.
+>
+> Жодного дефекту немає: це валідний фреймворковий патерн (база надає storage+policy, похідний enforce'ить).
+> Реалізація «фіксу» (enforce в базі або видалення членів) **зламала б** і реального споживача, і існуючий
+> тест. Тому фінт не виконується. Урок занесено у підсумок нижче.
 
 ---
 
-### R2-M4. Source generator doesn't detect methods that resolve to the same JSON-RPC name — emits duplicate `AddLocalRpcMethod` → throws at bind time
+### R2-M4. Source generator doesn't detect methods that resolve to the same JSON-RPC name — emits duplicate `AddLocalRpcMethod` → throws at bind time  ✅ SHIPPED
+
+> **Статус:** виправлено. Додано діагностику `WSRPC003`: `CollectMethods` групує за JSON-іменем, кожну
+> колізію (overload'и / однаковий `[JsonRpcMethod]`) повідомляє Warning'ом і виключає всі методи групи з
+> binder'а (рефлексійний `AddLocalRpcTarget` лишається для таких сервісів). Guard:
+> `Generator_DuplicateJsonName_ReportsWsrpc003AndSkipsColliding`. Suite 130 → 131.
 
 **Where:** `src/WsRpcServer.SourceGenerator/RpcServiceCatalogGenerator.cs:161-194` (`CollectMethods` — без дедуплікації за JSON-іменем) + `:196-219` (`UnsupportedReason` — не ловить колізії імен) + emit на `:388-394` (`EmitAddMethod` → `jsonRpc.AddLocalRpcMethod("<name>", …)`).
 
@@ -105,7 +124,13 @@ if (_disposed)
 
 ## 🟢 LOW
 
-### R2-L1. Consecutive-failure circuit breaker uses a stale local count — concurrent success can still trip unregister
+### R2-L1. Consecutive-failure circuit breaker uses a stale local count — concurrent success can still trip unregister  ✅ SHIPPED
+
+> **Статус:** виправлено. Рішення про авто-відписку тепер атомарне:
+> `_consecutiveFailures.TryRemove(KeyValuePair{clientId, failures})` знімає лічильник лише якщо він
+> усе ще дорівнює знімку — конкурентний скид (success) скасовує відписку. Guard:
+> `OnNotificationFailed_CounterResetBetweenIncrementAndCheck_DoesNotUnregister` (перевірено: падає на
+> pre-fix, проходить post-fix). Suite 129 → 130.
 
 **Where:** `src/WsRpcServer/Events/AbstractEventProcessor.cs:277-291` (`OnNotificationFailed`) проти `:260` (reset на успіх) — обидва біжать у `ContinueWith`-continuation'ах на `TaskScheduler.Default`.
 
@@ -119,26 +144,36 @@ if (_disposed)
 
 ---
 
-## Summary — counts + roadmap
+## Summary — counts + статус реалізації
 
-| Severity | Count | IDs |
-|---|---|---|
-| 🔴 HIGH | 0 | — |
-| 🟡 MEDIUM | 4 | R2-M1 … R2-M4 |
-| 🟢 LOW | 1 | R2-L1 |
-| **Total** | **5** | |
+| Severity | Count | IDs | Статус |
+|---|---|---|---|
+| 🔴 HIGH | 0 | — | — |
+| 🟡 MEDIUM | 4 | R2-M1, R2-M2, R2-M4 ✅ shipped; R2-M3 ❌ відкликано | 3 shipped / 1 false-positive |
+| 🟢 LOW | 1 | R2-L1 ✅ shipped | shipped |
+| **Total** | **5** | **4 виправлено, 1 відкликано** | |
 
-### Запропонована roadmap (capability-shape, low-risk first)
+### Реалізація (2026-06-23, той самий день)
 
-| Order | Capability | Findings | Files | Risk |
-|---|---|---|---|---|
-| 1 | `configureawait-library-sweep` | R2-M1 | WebSocketMessageHandler, AbstractJsonRpcSession (+ Roslyn guard) | none |
-| 2 | `transport-dispose-guard` | R2-M2 | WebSocketMessageHandler | low |
-| 3 | `eventprocessor-failure-cas` | R2-L1 | AbstractEventProcessor | low |
-| 4 | `subscription-cap-enforce-or-remove` | R2-M3 | AbstractSubscriptionManager | medium (behavior/API) |
-| 5 | `generator-jsonname-collision-diag` | R2-M4 | RpcServiceCatalogGenerator (+ WSRPC003 + guard) | low |
+Усі валідні знахідки виправлено — по одному коміту на знахідку, кожен із regression-guard'ом
+(правило репо: «fix without a guard is the next regression»). Suite **128 → 131** (+3 нові тести;
+R2-M2 оновив існуючий тест). Build 0 warnings у lib+tests.
 
-Усе chunkable в 1-2 OpenSpec changes. R2-M3 — єдиний пункт із вибором API-напряму (enforce vs. remove) → варто узгодити перед реалізацією. Кожен фікс супроводжується regression-guard'ом (правило репо: "fix without a guard is the next regression").
+| Finding | Capability | Guard | Δ suite |
+|---|---|---|---|
+| R2-M1 | `configureawait-library-sweep` | `ConfigureAwaitConventionTests` (Roslyn-скан) | 128 → 129 |
+| R2-M2 | `transport-dispose-guard` | `ProcessReceivedDataAsync_WhenDisposed_ThrowsObjectDisposedException` | 129 (оновлено) |
+| R2-L1 | `eventprocessor-failure-cas` | `OnNotificationFailed_CounterResetBetweenIncrementAndCheck_DoesNotUnregister` | 129 → 130 |
+| R2-M4 | `generator-jsonname-collision-diag` (WSRPC003) | `Generator_DuplicateJsonName_ReportsWsrpc003AndSkipsColliding` | 130 → 131 |
+| R2-M3 | — | — (відкликано) | — |
+
+### Урок (для майбутніх аудитів цього репо)
+
+**R2-M3 був false positive через grep лише по `src/` цього репо.** Перед тим як оголосити
+`protected`-член «мертвим», обов'язково перевір **downstream-споживачів** (тут — `SignalCliNet.WsRpcServer`):
+`protected` API фреймворку існує саме для похідних класів, тож «невикористаний у `src/`» ≠ «невикористаний».
+Це той самий урок, що sibling-правило SignalCli.NET `audit-debt.md §0.5` («cite-and-read, not cite-and-trust»).
+Варто додати його у `.claude/rules/audit-debt.md` цього репо як prevention-checklist пункт.
 
 ### Не зловлено цим audit'ом (потребує live/dynamic аналізу)
 
