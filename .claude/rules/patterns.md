@@ -89,6 +89,45 @@ business logic. Every pattern below exists to keep that extension seam safe and 
   `IL3053`/`IL2104` on `StreamJsonRpc.dll` + transitive `Newtonsoft.Json`); end-to-end AOT RPC payloads are
   the remaining **upstream** gap. Replacing StreamJsonRpc wholesale was researched and rejected.
 
+## Secure transport + authorization (`secure-transport-mtls`, 2.6.0)
+
+- ✅ Shipped. TLS/mTLS is a **transport-layer mechanism** so it lives in the framework, opt-in + additive
+  (CLAUDE.md rule #11). `AbstractSecureJsonRpcServer : WssServer` + `AbstractSecureJsonRpcSession : WssSession`
+  serve `wss://`; the plaintext `AbstractJsonRpcServer`/`AbstractJsonRpcSession` are untouched. NetCoreServer
+  splits plaintext (`WsSession : HttpSession`) and TLS (`WssSession : HttpsSession`) into **separate hierarchies
+  with no shared WS base type**, so the secure session **duplicates** the notification infra (channel /
+  `SendNotificationAsync` / `ProcessNotificationsAsync` / disposal) — that divergence is unavoidable; keep both
+  in sync if you touch one.
+- **Validation runs inside `RemoteCertificateValidationCallback`.** NetCoreServer authenticates via
+  `BeginAuthenticateAsServer` (APM `SslStream`), so the modern `SslServerAuthenticationOptions.CertificateChainPolicy`
+  is **not** available — you cannot hand the runtime an `X509ChainPolicy` declaratively. `CustomRootTrustValidator`
+  builds its own `X509Chain` (`TrustMode = CustomRootTrust` + private-CA `CustomTrustStore` — never the machine
+  store; EKU `clientAuth`; `RevocationMode.Offline` by default; optional SPKI-SHA-256 pin). **Never `=> true` in a
+  cert callback; never `X509RevocationMode.NoCheck` without an adjacent `// justification:`** — the Roslyn guard
+  `CertificateValidationConventionTests` fails the build (the "ходьба по колу" guard class; it's Roslyn member-access
+  based, so doc-comment `<see cref>` mentions don't trip it).
+- **Per-connection identity correlation.** The single shared callback's `sender` is the session's `SslStream`;
+  `SecureTransport` stores the validated `NodeIdentity` in a `ConditionalWeakTable<object, …>` keyed by that stream,
+  and the secure session retrieves it in `OnWsConnected` via `SslSessionInterop` — **one cached reflection read** of
+  NetCoreServer's private `SslSession._sslStream` (justified transport glue, `[UnconditionalSuppressMessage]`, fails
+  closed if the field is renamed). `INodeIdentityResolver` (default `SpiffeNodeIdentityResolver`: SAN-URI/SPIFFE name,
+  SPKI-SHA-256 fallback; URI SANs parsed via `AsnReader` since the BCL SAN extension only enumerates DNS/IP) →
+  `NodeIdentityPrincipalFactory.Create` → `ClaimsPrincipal` (authType `"mtls"` ⇒ `IsAuthenticated`).
+- **Authorization is deny-by-default for attributed methods only.** `[RpcAuthorize(Roles=…)]` (method or interface).
+  `RpcAuthorizationEnforcer.Enforce` is the **single** primitive (throws `RpcErrorException(-32001)`, fails closed
+  when policy is null). Two dispatch call sites: reflection path via `AuthorizingJsonRpc.DispatchRequestAsync`
+  (consumer constructs `new AuthorizingJsonRpc(handler, principal, policy)` instead of `new JsonRpc(handler)`;
+  reads `[RpcAuthorize]` through `RpcAuthorizationMetadata` over the interface map); generated binder emits the
+  `Enforce(...)` call **at the head of the delegate** for attributed methods (attribute read at compile time → stays
+  AOT-clean). `IRpcMethodBinder.Bind` gained a `ClaimsPrincipal?` param; `IRpcServiceRegistry.RegisterServices` has a
+  principal-aware overload (DIM default forwards to the 2-arg). Default policy `StaticRoleMapAuthorizationPolicy`
+  (identity→roles map). Un-attributed methods stay open — purely additive.
+- DI: `AddSecureJsonRpcCore<…>(Action<JsonRpcServerConfig>?, Action<TlsServerOptions>?)` + `AddSecureTransport(...)`
+  mirror the plaintext composition root; `TlsServerOptions` is validated fail-fast (source-gen `[OptionsValidator]`
+  `TlsServerOptionsValidator` + cross-field rules: server cert has a private key, mTLS needs ≥1 `TrustedRoots`).
+  Logging EventId blocks **1500–1549** (secure server), **1550–1599** (mTLS validator/identity), **1600–1699**
+  (authorization). Full reference: [`docs/api/security.md`](../../docs/api/security.md).
+
 ## Transport / parse-recovery (audit finding H2)
 
 - `WebSocketMessageHandler : Stream` adapts WS frames into the byte stream StreamJsonRpc reads. The

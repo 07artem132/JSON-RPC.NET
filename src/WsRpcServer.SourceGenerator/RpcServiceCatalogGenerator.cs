@@ -23,6 +23,7 @@ public sealed class RpcServiceCatalogGenerator : IIncrementalGenerator
     private const string ClientAwareInterface = "WsRpcServer.Services.IClientAwareRpcService";
     private const string JsonRpcMethodAttribute = "StreamJsonRpc.JsonRpcMethodAttribute";
     private const string JsonRpcIgnoreAttribute = "StreamJsonRpc.JsonRpcIgnoreAttribute";
+    private const string RpcAuthorizeAttribute = "WsRpcServer.Authorization.RpcAuthorizeAttribute";
 
     private static readonly DiagnosticDescriptor MultipleImplementations = new(
         id: "WSRPC001",
@@ -53,11 +54,17 @@ public sealed class RpcServiceCatalogGenerator : IIncrementalGenerator
 
     private static readonly SymbolDisplayFormat Fq = SymbolDisplayFormat.FullyQualifiedFormat;
 
-    /// <summary>Один RPC-метод, готовий до прив'язки: JSON-ім'я + символ методу.</summary>
-    private sealed class MethodBinding(string jsonName, IMethodSymbol method)
+    /// <summary>Один RPC-метод, готовий до прив'язки: JSON-ім'я + символ методу + вимога авторизації.</summary>
+    private sealed class MethodBinding(string jsonName, IMethodSymbol method, bool authorized, string? roles)
     {
         public string JsonName { get; } = jsonName;
         public IMethodSymbol Method { get; } = method;
+
+        /// <summary>Чи метод позначено <c>[RpcAuthorize]</c> (на методі чи інтерфейсі).</summary>
+        public bool Authorized { get; } = authorized;
+
+        /// <summary>Значення <c>Roles</c> з атрибута (може бути <c>null</c>/порожнім — лише автентифікація).</summary>
+        public string? Roles { get; } = roles;
     }
 
     /// <summary>Сервіс + його прив'язувані методи.</summary>
@@ -100,6 +107,7 @@ public sealed class RpcServiceCatalogGenerator : IIncrementalGenerator
         var clientAwareSymbol = compilation.GetTypeByMetadataName(ClientAwareInterface);
         var jsonRpcMethodSymbol = compilation.GetTypeByMetadataName(JsonRpcMethodAttribute);
         var jsonRpcIgnoreSymbol = compilation.GetTypeByMetadataName(JsonRpcIgnoreAttribute);
+        var authorizeSymbol = compilation.GetTypeByMetadataName(RpcAuthorizeAttribute);
 
         // interface → (impl, isClientAware); перша реалізація перемагає, на дублі — діагностика.
         var byInterface = new Dictionary<INamedTypeSymbol, (INamedTypeSymbol Impl, bool ClientAware)>(
@@ -144,7 +152,7 @@ public sealed class RpcServiceCatalogGenerator : IIncrementalGenerator
         var services = byInterface
             .Select(kvp => new ServiceModel(
                 kvp.Key, kvp.Value.Impl, kvp.Value.ClientAware,
-                CollectMethods(context, kvp.Key, rpcServiceSymbol, clientAwareSymbol, jsonRpcMethodSymbol, jsonRpcIgnoreSymbol)))
+                CollectMethods(context, kvp.Key, rpcServiceSymbol, clientAwareSymbol, jsonRpcMethodSymbol, jsonRpcIgnoreSymbol, authorizeSymbol)))
             .OrderBy(s => s.Interface.ToDisplayString(), System.StringComparer.Ordinal)
             .ToImmutableArray();
 
@@ -208,7 +216,8 @@ public sealed class RpcServiceCatalogGenerator : IIncrementalGenerator
         INamedTypeSymbol rpcServiceSymbol,
         INamedTypeSymbol? clientAwareSymbol,
         INamedTypeSymbol? jsonRpcMethodSymbol,
-        INamedTypeSymbol? jsonRpcIgnoreSymbol)
+        INamedTypeSymbol? jsonRpcIgnoreSymbol,
+        INamedTypeSymbol? authorizeSymbol)
     {
         var result = new List<MethodBinding>();
 
@@ -219,6 +228,9 @@ public sealed class RpcServiceCatalogGenerator : IIncrementalGenerator
 
         foreach (var src in sources)
         {
+            // [RpcAuthorize] на рівні інтерфейсу застосовується до всіх його методів.
+            var ifaceAuthorize = FindAuthorize(src, authorizeSymbol);
+
             foreach (var method in src.GetMembers().OfType<IMethodSymbol>())
             {
                 if (method.MethodKind != MethodKind.Ordinary)
@@ -242,7 +254,13 @@ public sealed class RpcServiceCatalogGenerator : IIncrementalGenerator
                     continue;
                 }
 
-                result.Add(new MethodBinding(ResolveJsonName(method, jsonRpcMethodSymbol), method));
+                // Вимога авторизації: атрибут на методі має пріоритет, інакше — на інтерфейсі.
+                var methodAuthorize = FindAuthorize(method, authorizeSymbol) ?? ifaceAuthorize;
+                bool authorized = methodAuthorize is not null;
+                string? roles = authorized ? ExtractRoles(methodAuthorize!) : null;
+
+                result.Add(new MethodBinding(
+                    ResolveJsonName(method, jsonRpcMethodSymbol), method, authorized, roles));
             }
         }
 
@@ -273,6 +291,32 @@ public sealed class RpcServiceCatalogGenerator : IIncrementalGenerator
             .OrderBy(m => m.JsonName, System.StringComparer.Ordinal)
             .ThenBy(m => m.Method.Parameters.Length)
             .ToList();
+    }
+
+    /// <summary>Знаходить атрибут <c>[RpcAuthorize]</c> на символі (метод чи інтерфейс), або <c>null</c>.</summary>
+    private static AttributeData? FindAuthorize(ISymbol symbol, INamedTypeSymbol? authorizeSymbol)
+    {
+        if (authorizeSymbol is null)
+        {
+            return null;
+        }
+
+        return symbol.GetAttributes().FirstOrDefault(a =>
+            SymbolEqualityComparer.Default.Equals(a.AttributeClass, authorizeSymbol));
+    }
+
+    /// <summary>Витягує значення властивості <c>Roles</c> з <c>[RpcAuthorize]</c> (named argument).</summary>
+    private static string? ExtractRoles(AttributeData attribute)
+    {
+        foreach (var named in attribute.NamedArguments)
+        {
+            if (named.Key == "Roles" && named.Value.Value is string roles)
+            {
+                return roles;
+            }
+        }
+
+        return null;
     }
 
     private static string? UnsupportedReason(IMethodSymbol method)
@@ -418,8 +462,10 @@ public sealed class RpcServiceCatalogGenerator : IIncrementalGenerator
         sb.AppendLine("    /// <summary>Source-генерований reflection-free binder: AddLocalRpcMethod на кожен метод (AOT-диспетч).</summary>");
         sb.AppendLine("    internal sealed class RpcMethodBinder : global::WsRpcServer.Services.IRpcMethodBinder");
         sb.AppendLine("    {");
-        sb.AppendLine("        public void Bind(global::StreamJsonRpc.JsonRpc jsonRpc, global::System.IServiceProvider serviceProvider, global::System.Guid clientId)");
+        sb.AppendLine("        public void Bind(global::StreamJsonRpc.JsonRpc jsonRpc, global::System.IServiceProvider serviceProvider, global::System.Guid clientId, global::System.Security.Claims.ClaimsPrincipal? principal)");
         sb.AppendLine("        {");
+        // Політика авторизації (для [RpcAuthorize]-методів); null → deny-by-default у Enforce.
+        sb.AppendLine("            var __policy = (global::WsRpcServer.Authorization.IRpcAuthorizationPolicy?)serviceProvider.GetService(typeof(global::WsRpcServer.Authorization.IRpcAuthorizationPolicy));");
 
         int index = 0;
         foreach (var s in services)
@@ -471,9 +517,38 @@ public sealed class RpcServiceCatalogGenerator : IIncrementalGenerator
     {
         // instanceVar може містити провідні пробіли для regular-гілки — приберемо їх для виразу.
         string v = instanceVar.Trim();
+
+        if (!m.Authorized)
+        {
+            // Без авторизації — пряме method-group перетворення (як раніше).
+            sb.Append(indent).Append("jsonRpc.AddLocalRpcMethod(\"").Append(m.JsonName).Append("\", new ")
+                .Append(DelegateType(m.Method)).Append('(').Append(v).Append('.').Append(m.Method.Name).AppendLine("));");
+            return;
+        }
+
+        // [RpcAuthorize]: лямбда, що ПЕРЕД викликом методу примушує політику (deny → RpcErrorException -32001).
+        var paramNames = m.Method.Parameters.Select((_, i) => "p" + i).ToList();
+        string lambdaParams = paramNames.Count == 0
+            ? "()"
+            : "(" + string.Join(", ", paramNames) + ")";
+        string rolesArg = m.Roles is null
+            ? "new global::WsRpcServer.Authorization.RpcAuthorizeAttribute()"
+            : "new global::WsRpcServer.Authorization.RpcAuthorizeAttribute { Roles = " + EncodeStringLiteral(m.Roles) + " }";
+        string invoke = v + "." + m.Method.Name + "(" + string.Join(", ", paramNames) + ")";
+        string body = m.Method.ReturnsVoid ? invoke + ";" : "return " + invoke + ";";
+
         sb.Append(indent).Append("jsonRpc.AddLocalRpcMethod(\"").Append(m.JsonName).Append("\", new ")
-            .Append(DelegateType(m.Method)).Append('(').Append(v).Append('.').Append(m.Method.Name).AppendLine("));");
+            .Append(DelegateType(m.Method)).Append('(').Append(lambdaParams).AppendLine(" =>");
+        sb.Append(indent).AppendLine("{");
+        sb.Append(indent).Append("    global::WsRpcServer.Authorization.RpcAuthorizationEnforcer.Enforce(__policy, principal, ")
+            .Append(rolesArg).Append(", \"").Append(m.JsonName).AppendLine("\", null);");
+        sb.Append(indent).Append("    ").AppendLine(body);
+        sb.Append(indent).AppendLine("}));");
     }
+
+    /// <summary>Кодує рядок як C#-літерал (через verbatim із подвоєнням лапок) — безпечно для ролей.</summary>
+    private static string EncodeStringLiteral(string value) =>
+        "@\"" + value.Replace("\"", "\"\"") + "\"";
 
     /// <summary>Прямий виклик конструктора для клієнт-залежного сервісу (AOT-безпечно): Guid→clientId, решта→DI.</summary>
     private static string ClientAwareInstantiation(INamedTypeSymbol impl)

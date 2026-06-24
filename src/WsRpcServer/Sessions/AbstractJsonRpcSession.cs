@@ -1,4 +1,5 @@
 ﻿using System.Net.WebSockets;
+using System.Security.Claims;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using NetCoreServer;
@@ -72,6 +73,16 @@ public abstract class AbstractJsonRpcSession(
     /// Конфігурація JSON-RPC сервера.
     /// </summary>
     protected JsonRpcServerConfig Config { get; } = config ?? throw new ArgumentNullException(nameof(config));
+
+    /// <summary>
+    /// Principal сесії, виведений з mTLS-ідентичності вузла (захищений транспорт).
+    /// </summary>
+    /// <remarks>
+    /// На плейн-текст транспорті лишається <c>null</c> (немає автентифікації). На захищеному
+    /// (<see cref="Core.AbstractSecureJsonRpcServer"/>) встановлюється у похідній сесії до
+    /// <c>RegisterServices</c>/<c>StartListening</c> і передається у примус <c>[RpcAuthorize]</c>.
+    /// </remarks>
+    protected ClaimsPrincipal? Principal { get; set; }
 
     /// <summary>
     /// Екземпляр JSON-RPC для обробки повідомлень.

@@ -20,8 +20,9 @@ It is a **framework of abstract base classes** — consumers subclass `AbstractJ
 `[IRpcService]` discovery. The primary downstream consumer is **SignalCliNet.WsRpcServer**.
 
 - Target framework: **net10.0**. Package version lives in `Directory.Build.props`
-  (`<WsRpcServerPackageVersion>`, currently **2.5.0**) — never hardcode `<Version>` in a csproj.
+  (`<WsRpcServerPackageVersion>`, currently **2.6.0**) — never hardcode `<Version>` in a csproj.
 - Five layers: Transport (WebSocket) → Protocol (JSON-RPC 2.0) → Session → Service → Subscription.
+  Optional **secure** transport (TLS/mTLS) + RPC authorization layer over them (`secure-transport-mtls`, 2.6.0).
 
 ## Build & test
 
@@ -129,14 +130,28 @@ Path-scoped agent instructions live in `.claude/rules/` (load conditionally when
 10. **Library logging is source-generated.** Every `ILogger` call in `src/WsRpcServer` goes through a
     `[LoggerMessage]` partial method in `src/WsRpcServer/Logging/<Type>Log.cs` (one `internal static
     partial class` per type, EventId block reserved per type: server 1000s, session 1100s, transport
-    1200s, registry 1300s, event-processor 1400s). No direct `Logger.LogX("template", …)` — `CA1848`/
+    1200s, registry 1300s, event-processor 1400s, **secure-transport 1500–1549, mTLS node-identity
+    1550–1599, authorization 1600–1699**). No direct `Logger.LogX("template", …)` — `CA1848`/
     `CA1873` are active there. Add a new log line by adding a `[LoggerMessage]` method, not an inline call.
     ✅ Shipped in `logger-message-migration` (2.1.0), guarded by `LoggerMessageMigrationTests`.
+11. **Secure transport is opt-in + additive; never blind-accept a certificate.** TLS/mTLS lives in the
+    framework (it owns transport): `AbstractSecureJsonRpcServer : WssServer` + `AbstractSecureJsonRpcSession :
+    WssSession` serve `wss://`; plaintext `AbstractJsonRpcServer`/`AbstractJsonRpcSession` are untouched
+    (separate NetCoreServer hierarchies — the secure session duplicates the notification infra by necessity).
+    Client-cert validation happens **inside** `RemoteCertificateValidationCallback` (NetCoreServer authenticates
+    via `BeginAuthenticateAsServer`, so `CertificateChainPolicy` is unavailable): `CustomRootTrustValidator`
+    builds its own `X509Chain` (`CustomRootTrust` + private CA `CustomTrustStore`, EKU `clientAuth`, default
+    `RevocationMode.Offline`, optional SPKI-pin). **Never `=> true` in a cert callback and never
+    `X509RevocationMode.NoCheck` without an adjacent `// justification:`** — `CertificateValidationConventionTests`
+    fails the build otherwise. `[RpcAuthorize]` is **deny-by-default for attributed methods only** (un-attributed
+    stay open): enforced on both dispatch paths via `RpcAuthorizationEnforcer.Enforce` (→ `RpcErrorException(-32001)`)
+    — reflection path through `AuthorizingJsonRpc.DispatchRequestAsync`, generated binder emits the check at the
+    delegate head (stays AOT-clean). ✅ Shipped in `secure-transport-mtls` (2.6.0), guarded by tests.
 
 > Rules 3-5 shipped in `security-hardening` (1.2.0); rules 6-7 in `composition-and-config` (1.3.0);
-> rule 8 in `subscription-manager-cleanup` (2.0.0); rule 10 in `logger-message-migration` (2.1.0) — each
-> with a regression-guard test (see
-> `tests/WsRpcServer.Tests/{Transport,Sessions,Events,Subscriptions,Services,Core,Extensions,Logging}`).
+> rule 8 in `subscription-manager-cleanup` (2.0.0); rule 10 in `logger-message-migration` (2.1.0);
+> rule 11 in `secure-transport-mtls` (2.6.0) — each with a regression-guard test (see
+> `tests/WsRpcServer.Tests/{Transport,Sessions,Events,Subscriptions,Services,Core,Extensions,Logging,Security,Authorization}`).
 > When you fix a remaining finding, add its guard test and move its bullet to a shipped state.
 
 ## Maturity baseline (do not regress below this)
@@ -144,7 +159,7 @@ Path-scoped agent instructions live in `.claude/rules/` (load conditionally when
 This repo is mid-maturation. The current floor, established by `foundation-cluster-1` (→ 1.1.0):
 
 - **Build hygiene:** 0 warnings, `TreatWarningsAsErrors=true` on lib + tests; shared `Directory.Build.props`.
-- **Tests:** unit suite green (**128**). Adding a feature that touches an open audit finding SHOULD add the matching regression-guard test (see `.claude/rules/audit-debt.md`).
+- **Tests:** unit suite green (**158**). Adding a feature that touches an open audit finding SHOULD add the matching regression-guard test (see `.claude/rules/audit-debt.md`).
 - **Process:** non-trivial work goes through OpenSpec (`openspec/changes/<name>/`); `AUDIT-FINDINGS.md` is the prioritized backlog (4 HIGH / 9 MEDIUM / 7 LOW — **all now shipped/resolved**).
 
 ## Implemented / planned
@@ -159,6 +174,24 @@ This repo is mid-maturation. The current floor, established by `foundation-clust
 - `registry-sourcegen-discovery` (**2.3.0**) — rule #4 / H3 AOT follow-up: new `src/WsRpcServer.SourceGenerator` (Roslyn `IIncrementalGenerator`) emits a reflection-free `IRpcServiceCatalog` for any consumer that opts in with `[assembly: GenerateRpcServiceCatalog]` + `AddGeneratedRpcServiceCatalog()`. `AbstractRpcServiceRegistry` prefers an injected catalog; reflection scan kept as `[RequiresUnreferencedCode]`/`[RequiresDynamicCode]` fallback. Generator packed into the nupkg (`analyzers/dotnet/cs`). 4 new guard tests (generator-driver + runtime catalog); suite 121 → 125. **Does not** flip `IsAotCompatible` — StreamJsonRpc's `AddLocalRpcTarget` is the remaining external blocker. See `openspec/changes/registry-sourcegen-discovery/`.
 - `aot-readiness` (**2.4.0**) — made the source-gen discovery path **provably Native-AOT-clean**: `[DynamicallyAccessedMembers(PublicConstructors)]` on `AddJsonRpcCore<…>`'s 5 service generics (clears IL2091) + honest `[UnconditionalSuppressMessage]` at the reflection-fallback boundary (IL2026/IL3050/IL3000, justified by "catalog is the AOT path"). Result: **0 IL warnings** under `-p:IsAotCompatible=true`, and a real `dotnet publish -p:PublishAot=true` native binary (`aot-smoke/`) runs catalog-based discovery with no reflection (exit 0). Does **not** flip `IsAotCompatible` (RPC dispatch still uses StreamJsonRpc reflection — see rule #4). See `openspec/changes/aot-readiness/`.
 - `aot-rpc-dispatch` (**2.5.0**) — made RPC **dispatch** Native-AOT-clean: the generator also emits an `IRpcMethodBinder` (separate opt-in `AddGeneratedRpcMethodBinder()`) that registers each RPC-interface method via source-generated `JsonRpc.AddLocalRpcMethod(name, delegate)` (no AOT attributes) instead of the reflective `AddLocalRpcTarget`; `RegisterServices` prefers the binder, else falls back to the annotated reflection path. Honors `[JsonRpcMethod]`/`[JsonRpcIgnore]` + camelCase; unsupported method shapes → `WSRPC002`, skipped. `aot-smoke` native binary binds dispatch via the generator (exit 0, no reflection). 3 new guard tests; suite 125 → 128. ⚠ Behavior trade-off: binder exposes only interface methods, drops target events / RpcMarshalable / JsonRpcTargetOptions (reflection path kept for those). Does **not** flip `IsAotCompatible` — StreamJsonRpc payload serialization (2.21.69) is the upstream gap (IL3053 on StreamJsonRpc.dll). See `openspec/changes/aot-rpc-dispatch/`.
+- `secure-transport-mtls` (**2.6.0**) — authn/authz track (README roadmap "Авторизація та аутентифікація"):
+  3 capabilities. **`tls-transport`**: `AbstractSecureJsonRpcServer : WssServer` + `AbstractSecureJsonRpcSession :
+  WssSession` serve `wss://` from validated `TlsServerOptions` (source-gen `[OptionsValidator]` fail-fast;
+  `SecureTransport.Create` builds the `SslContext` once); plaintext path untouched. **`mtls-node-identity`**:
+  `ClientCertificateRequired=true` + pluggable `INodeCertificateValidator` (default `CustomRootTrustValidator` —
+  manual `X509Chain`, `CustomRootTrust` + private CA, EKU `clientAuth`, `RevocationMode.Offline`, optional SPKI-pin)
+  validated inside `RemoteCertificateValidationCallback`; validated cert → `NodeIdentity` (`INodeIdentityResolver`,
+  default SAN-URI/SPIFFE with SPKI fallback) → `ClaimsPrincipal` on the session (correlated per-connection via
+  `SecureTransport`'s `ConditionalWeakTable` keyed by `SslStream` — one cached reflection field-read of NetCoreServer's
+  private `_sslStream`, `SslSessionInterop`). **`rpc-authorization`**: `[RpcAuthorize(Roles=…)]` deny-by-default for
+  attributed methods on both dispatch paths (`AuthorizingJsonRpc.DispatchRequestAsync` reflection + generator-emitted
+  check at the binder delegate head) via `RpcAuthorizationEnforcer` → `RpcErrorException(-32001)`; default
+  `StaticRoleMapAuthorizationPolicy` (identity→roles map). `IRpcMethodBinder.Bind` gained a `ClaimsPrincipal?` param;
+  `IRpcServiceRegistry` gained a principal-aware `RegisterServices` (DIM default → 2-arg). New EventId blocks
+  1500–1699. No new NuGet dep. 24 new guard tests (suite 134 → 158), incl. the `CertificateValidationConventionTests`
+  Roslyn guard (no `=> true` / unjustified `NoCheck`). Does **not** flip `IsAotCompatible` (rule #4 upstream blocker
+  stands). **Downstream follow-up (separate change):** `SignalCliNet.WsRpcServer` wires cert + private CA + SPKI +
+  node→roles via `AddSignalJsonRpc`. See `openspec/changes/secure-transport-mtls/`.
 - **Backlog** (from `AUDIT-FINDINGS.md`): **empty** — all 20 findings shipped/resolved, plus the AOT track (`registry-sourcegen-discovery` → `aot-readiness` → `aot-rpc-dispatch`) is complete for the part we own (discovery + dispatch). The remaining AOT limit is **upstream**: StreamJsonRpc 2.25.29's formatter/envelope serialization isn't AOT-clean (IL3053), so `<IsAotCompatible>true</IsAotCompatible>` stays off until StreamJsonRpc ships an AOT-safe formatter. The StreamJsonRpc-replacement question was researched (spike) and rejected.
 
 ## Git

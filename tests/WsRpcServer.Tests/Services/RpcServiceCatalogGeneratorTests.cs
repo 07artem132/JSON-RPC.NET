@@ -227,6 +227,50 @@ namespace WsRpcServer.Tests.Services
             Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
         }
 
+        private const string SampleWithAuthorize = """
+            using WsRpcServer.Services;
+            using WsRpcServer.Authorization;
+
+            [assembly: GenerateRpcServiceCatalog]
+
+            namespace Sample
+            {
+                public interface ISecureRpc : IRpcService
+                {
+                    [RpcAuthorize(Roles = "admin")] System.Threading.Tasks.Task Delete(int id);
+                    void Ping();
+                }
+
+                public sealed class SecureRpc : ISecureRpc
+                {
+                    public System.Threading.Tasks.Task Delete(int id) => System.Threading.Tasks.Task.CompletedTask;
+                    public void Ping() { }
+                }
+            }
+            """;
+
+        [Fact]
+        public void Generator_AuthorizedMethod_EmitsEnforceInBinderDelegate()
+        {
+            // rpc-authorization: позначений метод отримує перевірку політики у ГОЛОВІ делегата
+            // (атрибут читається на компіляції → рантайм лишається reflection-free, AOT-clean).
+            var (output, generated, diagnostics) = RunGenerator(SampleWithAuthorize);
+
+            Assert.DoesNotContain(diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+
+            // Bind приймає principal; політика резолвиться; для "delete" емітиться Enforce із роллю.
+            Assert.Contains("ClaimsPrincipal? principal", generated);
+            Assert.Contains("RpcAuthorizationEnforcer.Enforce(__policy, principal", generated);
+            Assert.Contains("Roles = @\"admin\"", generated);
+            Assert.Contains("AddLocalRpcMethod(\"delete\"", generated);
+
+            // Непозначений "ping" лишається прямим method-group (без Enforce у його реєстрації).
+            Assert.Contains("AddLocalRpcMethod(\"ping\", new global::System.Action(", generated);
+
+            // Згенерований код валідний C# (компілюється проти реального StreamJsonRpc + WsRpcServer).
+            Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+        }
+
         [Fact]
         public void Generator_WithoutMarker_EmitsNothing()
         {
