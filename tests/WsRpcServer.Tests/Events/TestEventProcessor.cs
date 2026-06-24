@@ -417,5 +417,59 @@ namespace WsRpcServer.Tests.Events
             Assert.NotNull(prop);
             Assert.Equal(typeof(ConcurrentBag<IDisposable>), prop!.PropertyType);
         }
+
+        [Fact]
+        public async Task OnNotificationFailed_CounterResetBetweenIncrementAndCheck_DoesNotUnregister()
+        {
+            // R2-L1: рішення про авто-відписку має бути атомарним щодо лічильника. HandleClientFailure
+            // викликається РІВНО між інкрементом і перевіркою порогу — імітуємо тут конкурентний скид
+            // лічильника (як це робить успішна доставка / re-register). До фіксу застаріле локальне
+            // `failures >= max` все одно відписувало б клієнта; після фіксу TryRemove(kvp) бачить, що
+            // лічильник зник, і відписки НЕ відбувається.
+            using var processor = new ResetBetweenChecksProcessor(_loggerMock.Object, threshold: 1);
+            var clientId = Guid.NewGuid();
+            processor.RegisterClient(clientId, processor.FailingHandler);
+
+            // Act — одна невдача (поріг = 1).
+            processor.PublicNotifyClient(clientId, "m", new object());
+
+            // HandleClientFailure відпрацював (скинув лічильник) — далі біжить перевірка порогу.
+            Assert.Same(processor.FailureHandled.Task,
+                await Task.WhenAny(processor.FailureHandled.Task, Task.Delay(2000)));
+
+            // На pre-fix коді UnregisterClient викликається майже миттєво тим самим continuation'ом;
+            // на post-fix — не викликається ніколи. Чекаємо вікно й переконуємось, що його НЕ було.
+            var unregistered = await Task.WhenAny(processor.UnregisterCalled.Task, Task.Delay(500));
+            Assert.NotSame(processor.UnregisterCalled.Task, unregistered);
+            Assert.True(processor.ClientHandlersAccessor.ContainsKey(clientId));
+        }
+
+        // Test-double для R2-L1: скидає лічильник усередині HandleClientFailure (вікно гонки)
+        // і фіксує, чи був викликаний UnregisterClient.
+        private sealed class ResetBetweenChecksProcessor(ILogger logger, int threshold)
+            : TestEventProcessor(logger, threshold)
+        {
+            public readonly TaskCompletionSource FailureHandled =
+                new(TaskCreationOptions.RunContinuationsAsynchronously);
+            public readonly TaskCompletionSource UnregisterCalled =
+                new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            public Func<string, object[], Task> FailingHandler { get; } =
+                (_, _) => Task.FromException(new InvalidOperationException("boom"));
+
+            protected override void HandleClientFailure(Guid clientId)
+            {
+                // Імітуємо конкурентний скид лічильника РІВНО між AddOrUpdate і перевіркою порогу:
+                // re-register викликає _consecutiveFailures.TryRemove(clientId).
+                RegisterClient(clientId, FailingHandler);
+                FailureHandled.TrySetResult();
+            }
+
+            public override void UnregisterClient(Guid clientId)
+            {
+                UnregisterCalled.TrySetResult();
+                base.UnregisterClient(clientId);
+            }
+        }
     }
 }

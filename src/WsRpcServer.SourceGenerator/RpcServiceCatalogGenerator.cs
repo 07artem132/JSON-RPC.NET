@@ -42,6 +42,15 @@ public sealed class RpcServiceCatalogGenerator : IIncrementalGenerator
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
+    private static readonly DiagnosticDescriptor DuplicateJsonName = new(
+        id: "WSRPC003",
+        title: "Кілька RPC-методів мапляться на однакове JSON-ім'я",
+        messageFormat:
+        "Метод '{1}' мапиться на JSON-ім'я '{0}', яке вже використовує інший метод; AOT-binder ('AddLocalRpcMethod') не підтримує overload'и — усі методи з цим іменем пропущено (лишаться доступними через рефлексійний AddLocalRpcTarget)",
+        category: "WsRpcServer",
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
     private static readonly SymbolDisplayFormat Fq = SymbolDisplayFormat.FullyQualifiedFormat;
 
     /// <summary>Один RPC-метод, готовий до прив'язки: JSON-ім'я + символ методу.</summary>
@@ -187,7 +196,30 @@ public sealed class RpcServiceCatalogGenerator : IIncrementalGenerator
             }
         }
 
-        return result
+        // R2-M4: JsonRpc.AddLocalRpcMethod(name, delegate) НЕ підтримує overload'и — два методи з
+        // однаковим JSON-іменем згенерували б два виклики того самого імені, що кидає на старті
+        // прив'язки. Групуємо за JSON-іменем; кожну колізію (overload'и / однаковий [JsonRpcMethod])
+        // діагностуємо WSRPC003 і ВИКЛЮЧАЄМО всі методи групи з binder'а (рефлексійний AddLocalRpcTarget
+        // лишається для таких сервісів).
+        var keep = new List<MethodBinding>(result.Count);
+        foreach (var group in result.GroupBy(m => m.JsonName, System.StringComparer.Ordinal))
+        {
+            if (group.Skip(1).Any())
+            {
+                foreach (var binding in group)
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        DuplicateJsonName, binding.Method.Locations.FirstOrDefault() ?? Location.None,
+                        binding.JsonName, binding.Method.ToDisplayString()));
+                }
+
+                continue;
+            }
+
+            keep.Add(group.First());
+        }
+
+        return keep
             .OrderBy(m => m.JsonName, System.StringComparer.Ordinal)
             .ThenBy(m => m.Method.Parameters.Length)
             .ToList();

@@ -377,8 +377,11 @@ namespace WsRpcServer.Tests.Transport
         }
 
         [Fact]
-        public async Task ProcessReceivedDataAsync_WhenDisposed_ThrowsInvalidOperationException()
+        public async Task ProcessReceivedDataAsync_WhenDisposed_ThrowsObjectDisposedException()
         {
+            // R2-M2: вхідний шлях кидає ідіоматичний ObjectDisposedException (симетрично до
+            // WriteCoreAsync), а не випадковий InvalidOperationException, що раніше витікав із
+            // завершеного PipeWriter ("Writing is not allowed...").
             // Arrange
             var handler = new WebSocketMessageHandler(
                 _mockSession.Object,
@@ -394,13 +397,13 @@ namespace WsRpcServer.Tests.Transport
             // Create test data
             var data = Encoding.UTF8.GetBytes("{\"jsonrpc\":\"2.0\",\"method\":\"test\",\"id\":1}");
 
-            // Act & Assert - Should throw InvalidOperationException with "Writing is not allowed after writer was completed"
-            var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            // Act & Assert
+            var exception = await Assert.ThrowsAsync<ObjectDisposedException>(async () =>
             {
                 await handler.ProcessReceivedDataAsync(data);
             });
-            
-            Assert.Contains("Writing is not allowed", exception.Message);
+
+            Assert.Equal(nameof(WebSocketMessageHandler), exception.ObjectName);
         }
 
         [Fact]

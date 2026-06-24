@@ -102,6 +102,54 @@ namespace WsRpcServer.Tests.Services
             Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
         }
 
+        private const string SampleWithOverloads = """
+            using WsRpcServer.Services;
+            using StreamJsonRpc;
+
+            [assembly: GenerateRpcServiceCatalog]
+
+            namespace Sample
+            {
+                public interface IOverloadRpc : IRpcService
+                {
+                    // Обидва мапляться на JSON-ім'я "send" — AddLocalRpcMethod overload'ів не підтримує.
+                    System.Threading.Tasks.Task Send(int a);
+                    System.Threading.Tasks.Task Send(string a);
+                    void Ping();
+                }
+
+                public sealed class OverloadRpc : IOverloadRpc
+                {
+                    public System.Threading.Tasks.Task Send(int a) => System.Threading.Tasks.Task.CompletedTask;
+                    public System.Threading.Tasks.Task Send(string a) => System.Threading.Tasks.Task.CompletedTask;
+                    public void Ping() { }
+                }
+            }
+            """;
+
+        [Fact]
+        public void Generator_DuplicateJsonName_ReportsWsrpc003AndSkipsColliding()
+        {
+            // R2-M4: два методи з однаковим JSON-іменем («send») не можна прив'язати через
+            // AddLocalRpcMethod (overload'и не підтримуються) — генератор має діагностувати WSRPC003
+            // і ВИКЛЮЧИТИ обидва, а не випромінити дубль, що кине на старті прив'язки.
+            var (output, generated, diagnostics) = RunGenerator(SampleWithOverloads);
+
+            Assert.DoesNotContain(diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+
+            // WSRPC003 повідомлено для колізії.
+            Assert.Contains(diagnostics, d => d.Id == "WSRPC003");
+
+            // Жодного AddLocalRpcMethod("send", ...) — колізійні методи виключено.
+            Assert.DoesNotContain("AddLocalRpcMethod(\"send\"", generated);
+
+            // Неконфліктний метод лишається прив'язаним.
+            Assert.Contains("AddLocalRpcMethod(\"ping\", ", generated);
+
+            // Згенерований код валідний C#.
+            Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+        }
+
         [Fact]
         public void Generator_WithoutMarker_EmitsNothing()
         {

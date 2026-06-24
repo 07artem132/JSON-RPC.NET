@@ -85,7 +85,7 @@ business logic. Every pattern below exists to keep that extension seam safe and 
   features (target events, `RpcMarshalable`, `JsonRpcTargetOptions`). Consumers needing those keep the
   reflection path (don't register the binder).
 - **Still do NOT set `<IsAotCompatible>true</IsAotCompatible>` on the library.** Even with discovery + dispatch
-  AOT-clean, StreamJsonRpc 2.21.69's own formatter/envelope serialization isn't AOT-clean (publish flags
+  AOT-clean, StreamJsonRpc 2.25.29's own formatter/envelope serialization isn't AOT-clean (publish flags
   `IL3053`/`IL2104` on `StreamJsonRpc.dll` + transitive `Newtonsoft.Json`); end-to-end AOT RPC payloads are
   the remaining **upstream** gap. Replacing StreamJsonRpc wholesale was researched and rejected.
 

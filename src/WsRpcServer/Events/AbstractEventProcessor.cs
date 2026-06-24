@@ -281,10 +281,18 @@ public abstract class AbstractEventProcessor(ILogger logger, int maxConsecutiveN
         // Зберігаємо хук для кастомної логіки похідних класів (зворотна сумісність).
         HandleClientFailure(clientId);
 
-        if (failures >= _maxConsecutiveNotificationFailures)
+        // R2-L1: рішення про авто-відписку має бути атомарним щодо лічильника, а не спиратися на
+        // застаріле локальне `failures`. Між AddOrUpdate і цією перевіркою конкурентна УСПІШНА доставка
+        // (NotifyClient → TryRemove) могла скинути streak — тоді відписувати клієнта НЕ можна.
+        // TryRemove(KeyValuePair) знімає запис лише якщо значення ВСЕ ЩЕ дорівнює нашому `failures`:
+        //  • конкурентний success встиг скинути лічильник → ключа немає → false → не відписуємо (streak перервано);
+        //  • конкурентна невдача інкрементувала далі (failures+1) → значення не збігається → false → відписку
+        //    зробить той потік із вищим лічильником (рівно одна відписка).
+        if (failures >= _maxConsecutiveNotificationFailures &&
+            _consecutiveFailures.TryRemove(new KeyValuePair<Guid, int>(clientId, failures)))
         {
             // Вбудований запобіжник: «зламаний» клієнт не отримуватиме нескінченний потік
-            // failed-сповіщень. UnregisterClient ідемпотентний і сам прибере лічильник.
+            // failed-сповіщень. UnregisterClient ідемпотентний (лічильник уже знято вище).
             AbstractEventProcessorLog.ClientAutoUnregistered(Logger, clientId, failures);
             UnregisterClient(clientId);
         }
