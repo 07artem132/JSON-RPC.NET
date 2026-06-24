@@ -42,6 +42,16 @@ its guard test) in the same change rather than building new code on top of the d
   `CLAUDE.md` and `AUDIT-FINDINGS.md` for the old name/value and update them in the same change.
 - **Fix without a guard.** A declared invariant with no test is the next regression. Prefer adding a small
   reflection/behavioral guard (see `.claude/rules/testing.md`) over trusting prose.
+- **Check downstream consumers before calling a `protected`/public member "dead".** A `grep` scoped to
+  `src/` of *this* repo is not evidence of non-use — `protected` API exists for derived classes, and the
+  primary consumer (**`SignalCliNet.WsRpcServer`**) lives in a sibling repo. Round-2 audit finding R2-M3
+  flagged `AbstractSubscriptionManager.ClientSubscriptionCounts`/`MaxSubscriptionsPerClient` as
+  "declared-but-unused" off a `src/`-only grep — but `SignalCliNet.WsRpcServer/Subscriptions/SubscriptionManager.cs`
+  reads/maintains both to enforce the per-client cap (the documented "base provides storage+policy, derived
+  enforces" Template-Method split). The "fix" (enforce-in-base or remove) would have broken the real consumer
+  **and** an existing test. Before deriving "remove it"/"it's a foot-gun" from non-use: grep the sibling
+  consumer repos (and `tests/`) too, and read the `*Core` XMLDoc contract. This is the local form of
+  SignalCli.NET's `audit-debt.md §0.5` "cite-and-read, not cite-and-trust" rule.
 
 ## Working style
 
