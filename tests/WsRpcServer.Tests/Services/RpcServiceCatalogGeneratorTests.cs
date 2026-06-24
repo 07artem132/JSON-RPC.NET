@@ -150,6 +150,83 @@ namespace WsRpcServer.Tests.Services
             Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
         }
 
+        // Кілька форм колізій ОДНОЧАСНО: intra-interface overload ("send"), однаковий явний
+        // [JsonRpcMethod("dup")] у межах інтерфейсу, та КРОС-СЕРВІСНЕ однакове ім'я ("shared") у двох
+        // різних сервісах. Усі прив'язуються на один JsonRpc, тож імена мають бути глобально унікальні.
+        private const string SampleWithEveryCollisionShape = """
+            using WsRpcServer.Services;
+            using StreamJsonRpc;
+
+            [assembly: GenerateRpcServiceCatalog]
+
+            namespace Sample
+            {
+                public interface IAlpha : IRpcService
+                {
+                    System.Threading.Tasks.Task Send(int a);                 // -> "send"
+                    System.Threading.Tasks.Task Send(string a);              // -> "send" (overload)
+                    [JsonRpcMethod("dup")] void A();                          // -> "dup"
+                    [JsonRpcMethod("dup")] void B();                          // -> "dup" (explicit collision)
+                    void Shared();                                           // -> "shared" (крос-сервіс)
+                    void AlphaOnly();                                        // -> "alphaOnly" (чистий)
+                }
+
+                public interface IBeta : IRpcService
+                {
+                    void Shared();                                           // -> "shared" (крос-сервіс)
+                    void BetaOnly();                                         // -> "betaOnly" (чистий)
+                }
+
+                public sealed class Alpha : IAlpha
+                {
+                    public System.Threading.Tasks.Task Send(int a) => System.Threading.Tasks.Task.CompletedTask;
+                    public System.Threading.Tasks.Task Send(string a) => System.Threading.Tasks.Task.CompletedTask;
+                    public void A() { }
+                    public void B() { }
+                    public void Shared() { }
+                    public void AlphaOnly() { }
+                }
+
+                public sealed class Beta : IBeta
+                {
+                    public void Shared() { }
+                    public void BetaOnly() { }
+                }
+            }
+            """;
+
+        [Fact]
+        public void Generator_BinderMethodNames_AreGloballyUnique()
+        {
+            // R2-M4 (класовий guard): незалежно від форми колізії (overload / однаковий [JsonRpcMethod] /
+            // те саме ім'я у різних сервісах), згенерований binder НІКОЛИ не реєструє одне JSON-ім'я двічі —
+            // інакше AddLocalRpcMethod кине на старті прив'язки. Ловить і майбутні крос-сервісні колізії.
+            var (output, generated, diagnostics) = RunGenerator(SampleWithEveryCollisionShape);
+
+            Assert.DoesNotContain(diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+
+            // Усі імена з AddLocalRpcMethod("<name>", ...) — глобально унікальні.
+            var names = System.Text.RegularExpressions.Regex
+                .Matches(generated, "AddLocalRpcMethod\\(\"([^\"]+)\"")
+                .Select(m => m.Groups[1].Value)
+                .ToList();
+
+            Assert.Equal(names.Count, names.Distinct().Count());
+
+            // Колізійні імена виключено повністю; чисті — лишилися.
+            Assert.DoesNotContain("send", names);
+            Assert.DoesNotContain("dup", names);
+            Assert.DoesNotContain("shared", names);   // крос-сервісне — теж знято з обох сервісів
+            Assert.Contains("alphaOnly", names);
+            Assert.Contains("betaOnly", names);
+
+            // Кожна форма колізії повідомлена WSRPC003.
+            Assert.Contains(diagnostics, d => d.Id == "WSRPC003");
+
+            // Згенерований код валідний C#.
+            Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+        }
+
         [Fact]
         public void Generator_WithoutMarker_EmitsNothing()
         {

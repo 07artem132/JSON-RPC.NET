@@ -148,7 +148,57 @@ public sealed class RpcServiceCatalogGenerator : IIncrementalGenerator
             .OrderBy(s => s.Interface.ToDisplayString(), System.StringComparer.Ordinal)
             .ToImmutableArray();
 
+        // R2-M4 (крос-сервісний рівень): усі сервіси прив'язуються на ОДИН JsonRpc, тож однакове
+        // JSON-ім'я у РІЗНИХ сервісах теж дало б дубль AddLocalRpcMethod (кидає на старті). CollectMethods
+        // знімає лише колізії в межах одного інтерфейсу — тут добиваємо глобальні.
+        services = ResolveCrossServiceCollisions(context, services);
+
         context.AddSource("WsRpcServerRpcServiceCatalog.g.cs", SourceText.From(Emit(services), Encoding.UTF8));
+    }
+
+    /// <summary>
+    /// Видаляє з binder'а методи, чиє JSON-ім'я експонує більш ніж один сервіс (усі на спільному JsonRpc),
+    /// діагностуючи кожен WSRPC003. Гарантує глобальну унікальність імен у згенерованому binder'і.
+    /// </summary>
+    private static ImmutableArray<ServiceModel> ResolveCrossServiceCollisions(
+        SourceProductionContext context, ImmutableArray<ServiceModel> services)
+    {
+        var nameCounts = new Dictionary<string, int>(System.StringComparer.Ordinal);
+        foreach (var service in services)
+        {
+            foreach (var method in service.Methods)
+            {
+                nameCounts[method.JsonName] = nameCounts.TryGetValue(method.JsonName, out var count) ? count + 1 : 1;
+            }
+        }
+
+        if (!nameCounts.Values.Any(c => c > 1))
+        {
+            return services;
+        }
+
+        var rebuilt = ImmutableArray.CreateBuilder<ServiceModel>(services.Length);
+        foreach (var service in services)
+        {
+            var kept = new List<MethodBinding>(service.Methods.Count);
+            foreach (var method in service.Methods)
+            {
+                if (nameCounts[method.JsonName] > 1)
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        DuplicateJsonName, method.Method.Locations.FirstOrDefault() ?? Location.None,
+                        method.JsonName, method.Method.ToDisplayString()));
+                }
+                else
+                {
+                    kept.Add(method);
+                }
+            }
+
+            rebuilt.Add(new ServiceModel(service.Interface, service.Impl, service.ClientAware, kept));
+        }
+
+        return rebuilt.ToImmutable();
     }
 
     /// <summary>Збирає прив'язувані методи інтерфейсу (з базових інтерфейсів теж), фільтруючи непідтримувані.</summary>
