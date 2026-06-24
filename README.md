@@ -12,17 +12,17 @@
 ## 📖 Зміст
 
 - [Про проект](#-про-проект)
+- [Документація](#-документація)
 - [Особливості](#-особливості)
 - [Вимоги](#-вимоги)
 - [Встановлення](#-встановлення)
-- [Швидкий старт](#-швидкий-старт)
+- [Посібник з упровадження](#-посібник-з-упровадження)
 - [Архітектура](#-архітектура)
 - [Компоненти](#-компоненти)
 - [Інтерфейси бібліотеки](#-інтерфейси-бібліотеки)
-- [Розширені приклади](#-розширені-приклади)
-- [Потокобезпечність](#-потокобезпечність)
 - [Обробка помилок](#-обробка-помилок)
 - [Залежності](#-залежності)
+- [Плани розвитку](#️-плани-розвитку-roadmap)
 - [Ліцензія](#-ліцензія)
 
 ---
@@ -39,6 +39,18 @@
 3. Session Layer — керування підключеннями клієнтів.
 4. Service Layer — реєстрація та виклик RPC‑методів.
 5. Subscription Layer — система підписок та сповіщень. 
+
+## 📚 Документація
+
+Поглиблений per-тип reference (точки розширення, інваріанти, приклади) живе у [`docs/`](docs/README.md):
+[композиція+конфіг](docs/api/composition-and-config.md) ·
+[сервер+сесія](docs/api/server-and-session.md) ·
+[сервіси+реєстр](docs/api/services-and-registry.md) ·
+[підписки](docs/api/subscriptions.md) ·
+[події](docs/api/events.md) ·
+[помилки](docs/api/errors.md) ·
+[end-to-end приклад](docs/examples/echo-server.md) ·
+[Native-AOT](docs/aot.md).
 
 ## 🚀 Особливості
 
@@ -94,22 +106,41 @@ using WsRpcServer.Extensions;
 
 var services = new ServiceCollection();
 services.AddLogging(b => b.AddConsole().SetMinimumLevel(LogLevel.Debug));
-services.AddJsonRpcCore(o =>
-{
-    o.Host = "0.0.0.0";
-    o.Port = 9000;
-});
-services.AddSingleton<IGreetingService, GreetingService>();
-services.AddSingleton<IRpcServiceRegistry, MyServiceRegistry>();
-services.AddSingleton<MyJsonRpcServer>();
+
+// Бізнес-сервіс (крок 2 нижче)
+services.AddSingleton<ICalculatorService, CalculatorService>();
+
+// Композиційний корінь: усі 5 core-сервісів + сервер одним викликом (фінд H1).
+// Конкретні типи визначені у кроках 2–6 нижче; повний код — docs/examples/echo-server.md.
+services.AddJsonRpcCore<
+    DemoJsonRpcServer,
+    DemoJsonRpcSession,
+    DemoEventProcessor,
+    DemoSubscriptionManager,
+    DemoServiceRegistry,
+    ServerEventType,   // TEventType
+    object>(           // TEventArgs
+    o =>
+    {
+        o.Host = "0.0.0.0";
+        o.Port = 9000;
+    });
 
 var provider = services.BuildServiceProvider();
-var server = provider.GetRequiredService<MyJsonRpcServer>();
 
+// Старт вручну: спершу обробник подій, потім сервер.
+var eventProcessor = provider.GetRequiredService<IEventProcessor>();
+await eventProcessor.StartAsync(CancellationToken.None);
+
+var server = provider.GetRequiredService<DemoJsonRpcServer>();
 Console.WriteLine($"Сервер стартує на {server.Address}:{server.Port}");
 server.Start();
+
+Console.WriteLine("Натисніть Enter для зупинки…");
 Console.ReadLine();
+
 server.Stop();
+await eventProcessor.StopAsync(CancellationToken.None);
 ```
 
 ### 2. Створення RPC‑сервісів
@@ -133,25 +164,36 @@ services.AddSingleton<ICalculatorService, CalculatorService>();
 ### 3. Клієнт‑залежні сервіси
 
 ```csharp
-public interface IEventsRpc : IClientAwareRpcService
+public interface IDemoEventsRpc : IClientAwareRpcService
 {
-    Task<int> Subscribe(string account, ServerEventType[] eventTypes);
+    Task<int> Subscribe(string topic, ServerEventType[] eventTypes, CancellationToken ct = default);
+    Task<bool> Unsubscribe(int subscriptionId, CancellationToken ct = default);
 }
 
-public class EventsRpc(ISubscriptionManager subs, Guid clientId) : IEventsRpc
+// clientId інжектиться реєстром (не з DI) — один екземпляр на з'єднання.
+public class DemoEventsRpcAdapter(
+    ISubscriptionManager<ServerEventType, object> subs,
+    Guid clientId) : IDemoEventsRpc
 {
-    public Task<int> Subscribe(string account, ServerEventType[] eventTypes) =>
-        subs.Subscribe(clientId, account, eventTypes);
+    public Task<int> Subscribe(string topic, ServerEventType[] eventTypes, CancellationToken ct = default) =>
+        subs.Subscribe(clientId, topic, eventTypes, ct);
+
+    public Task<bool> Unsubscribe(int subscriptionId, CancellationToken ct = default) =>
+        subs.Unsubscribe(clientId, subscriptionId, ct);
 }
 ```
 
 ### 4. Користувацький обробник подій
 
 ```csharp
-public class DemoEventProcessor(ILogger<DemoEventProcessor> logger)
-    : AbstractEventProcessor(logger)
+public record SystemStatusEvent(string Status, DateTime Timestamp);
+
+public class DemoEventProcessor : AbstractEventProcessor
 {
-    private readonly Timer _timer = new(_ => Publish(), null, 5_000, 10_000);
+    private readonly Timer _timer;
+
+    public DemoEventProcessor(ILogger<DemoEventProcessor> logger) : base(logger) =>
+        _timer = new Timer(_ => Publish(), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10));
 
     private void Publish()
     {
@@ -165,23 +207,36 @@ public class DemoEventProcessor(ILogger<DemoEventProcessor> logger)
 ### 5. Користувацький менеджер підписок
 
 ```csharp
+public enum ServerEventType { SystemStatus, UserActivity }
+
 public class DemoSubscriptionManager(ILogger<DemoSubscriptionManager> log, DemoEventProcessor ep)
-    : AbstractSubscriptionManager(log, 10)
+    : AbstractSubscriptionManager<ServerEventType, object>(log, maxSubscriptionsPerClient: 10)
 {
     private readonly Dictionary<Guid, HashSet<ServerEventType>> _map = new();
 
-    public override Task<int> Subscribe(Guid clientId, string account, object types, CancellationToken _ = default)
+    // Реалізуємо лише *Core — база серіалізує мутації під OperationLock.
+    // НЕ викликай публічний Subscribe зсередини *Core (семафор не реентрантний = дедлок).
+    protected override Task<int> SubscribeCore(
+        Guid clientId, string topic, IReadOnlyCollection<ServerEventType> types, CancellationToken ct)
     {
-        if (types is not ServerEventType[] arr) return Task.FromResult(-1);
-        _map.TryAdd(clientId, new HashSet<ServerEventType>());
-        foreach (var t in arr) _map[clientId].Add(t);
-        return Task.FromResult(Interlocked.Increment(ref _subscriptionId));
+        if (!_map.TryGetValue(clientId, out var set)) _map[clientId] = set = new();
+        foreach (var t in types) set.Add(t);
+        return Task.FromResult(999);
     }
 
-    public override List<Guid> GetClientsForEvent(object args, object eventType) =>
-        eventType is ServerEventType t
-            ? _map.Where(kv => kv.Value.Contains(t)).Select(kv => kv.Key).ToList()
-            : [];
+    protected override Task<bool> UnsubscribeCore(Guid clientId, int subscriptionId, CancellationToken ct) =>
+        Task.FromResult(_map.Remove(clientId));
+
+    protected override Task<bool> UpdateSubscriptionCore(
+        Guid clientId, int subscriptionId, IReadOnlyCollection<ServerEventType> types, CancellationToken ct)
+    {
+        _ = SubscribeCore(clientId, string.Empty, types, ct);   // сусідній *Core напряму
+        return Task.FromResult(true);
+    }
+
+    // Гарячий шлях читання — без замка.
+    public override List<Guid> GetClientsForEvent(object args, ServerEventType eventType) =>
+        _map.Where(kv => kv.Value.Contains(eventType)).Select(kv => kv.Key).ToList();
 }
 ```
 
@@ -195,10 +250,19 @@ public class DemoJsonRpcServer(IPAddress addr, int port, IServiceProvider sp, IL
         ActivatorUtilities.CreateInstance<DemoJsonRpcSession>(ServiceProvider, this);
 }
 
-public sealed class DemoJsonRpcSession(DemoJsonRpcServer srv, IServiceProvider sp, ILogger<DemoJsonRpcSession> log)
-    : AbstractJsonRpcSession(srv, sp, log)
+// Базовий ctor сесії: (WsServer server, ILogger logger, JsonRpcServerConfig config).
+// Решту залежностей (реєстр, обробник подій) додай параметрами — їх підставить
+// ActivatorUtilities. Повний OnWsConnected/OnWsDisconnected — docs/examples/echo-server.md.
+public sealed class DemoJsonRpcSession(
+    WsServer server,
+    ILogger<DemoJsonRpcSession> logger,
+    IServiceProvider serviceProvider,
+    IRpcServiceRegistry registry,
+    IEventProcessor eventProcessor,
+    JsonRpcServerConfig config)
+    : AbstractJsonRpcSession(server, logger, config)
 {
-    // Перевизначте OnWsConnected / OnWsReceived / OnWsDisconnected за потреби
+    // Перевизначте OnWsConnected / OnWsReceived / OnWsDisconnected.
 }
 ```
 
@@ -327,12 +391,12 @@ public interface IJsonRpcSession
 Інтерфейс для управління підписками:
 
 ```csharp
-public interface ISubscriptionManager : IDisposable
+public interface ISubscriptionManager<TEventType, TEventArgs> : IDisposable
 {
-    Task<int> Subscribe(Guid clientId, string account, object eventTypes, CancellationToken cancellationToken = default);
+    Task<int> Subscribe(Guid clientId, string topic, IReadOnlyCollection<TEventType> eventTypes, CancellationToken cancellationToken = default);
     Task<bool> Unsubscribe(Guid clientId, int subscriptionId, CancellationToken cancellationToken = default);
-    Task<bool> UpdateSubscription(Guid clientId, int subscriptionId, object eventTypes, CancellationToken cancellationToken = default);
-    List<Guid> GetClientsForEvent(object args, object eventType);
+    Task<bool> UpdateSubscription(Guid clientId, int subscriptionId, IReadOnlyCollection<TEventType> eventTypes, CancellationToken cancellationToken = default);
+    List<Guid> GetClientsForEvent(TEventArgs args, TEventType eventType);
 }
 ```
 
@@ -341,7 +405,7 @@ public interface ISubscriptionManager : IDisposable
 Інтерфейс для обробки подій:
 
 ```csharp
-public interface IEventProcessor : IDisposable
+public interface IEventProcessor
 {
     Task StartAsync(CancellationToken cancellationToken);
     Task StopAsync(CancellationToken cancellationToken);

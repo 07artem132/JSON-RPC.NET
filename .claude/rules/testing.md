@@ -33,3 +33,13 @@ addressed:
 - A flood test sending many malformed JSON frames asserting the connection is closed/throttled
   (finding H2).
 - Per-field `JsonRpcServerConfig` validation tests (finding M5).
+
+## Docs coverage guard (RG09 analog)
+
+`tests/WsRpcServer.Tests/Docs/DocsApiCoverageTests.cs` reflectively enumerates every **public exported
+type** of the `WsRpcServer` assembly and asserts each is mentioned (word-boundary regex) in some
+`docs/api/*.md` — the SignalCli.NET RG09 pattern. A new public type without a docs entry fails the test
+build. It's an **anti-omission** guard (presence of a mention), not a prose-correctness check; keeping
+the description accurate after an API change is PR-time review discipline (mirror SignalCli.NET
+`audit-debt.md § docs/api/ prose drift`). The `docs/` tree convention is documented in
+[`docs/README.md`](../../docs/README.md).
