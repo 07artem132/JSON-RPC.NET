@@ -78,7 +78,7 @@ internal static class Program
         using var serverRpc =
             new JsonRpc(new HeaderDelimitedMessageHandler(serverStream, new SystemTextJsonFormatter()));
 
-        binder.Bind(serverRpc, sp, clientId);   // ← AddLocalRpcMethod на кожен метод, без рефлексії
+        binder.Bind(serverRpc, sp, clientId, principal: null);   // ← AddLocalRpcMethod на кожен метод, без рефлексії
         serverRpc.StartListening();
 
         bool ok = discovered == 2

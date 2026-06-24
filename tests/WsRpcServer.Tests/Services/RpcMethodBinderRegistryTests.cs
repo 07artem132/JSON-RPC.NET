@@ -14,7 +14,7 @@ namespace WsRpcServer.Tests.Services
         public bool BindCalled { get; private set; }
         public Guid ClientId { get; private set; }
 
-        public void Bind(JsonRpc jsonRpc, IServiceProvider serviceProvider, Guid clientId)
+        public void Bind(JsonRpc jsonRpc, IServiceProvider serviceProvider, Guid clientId, System.Security.Claims.ClaimsPrincipal? principal)
         {
             BindCalled = true;
             ClientId = clientId;

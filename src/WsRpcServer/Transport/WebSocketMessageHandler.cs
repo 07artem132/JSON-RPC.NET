@@ -7,6 +7,7 @@ using StreamJsonRpc;
 using StreamJsonRpc.Protocol;
 using StreamJsonRpc.Reflection;
 using WsRpcServer.Core;
+using WsRpcServer.Diagnostics;
 using WsRpcServer.Logging;
 using WsRpcServer.Sessions;
 
@@ -159,6 +160,7 @@ public sealed class WebSocketMessageHandler : MessageHandlerBase, IJsonRpcMessag
             catch (JsonException jsonEx)
             {
                 _consecutiveParseFailures++;
+                WsRpcServerDiagnostics.ParseFailure();
 
                 // Логуємо на Warning (не Error) — це очікуваний клас помилок від клієнта, а не збій сервера.
                 WebSocketMessageHandlerLog.ParseError(_logger, jsonEx, _session.Id, _consecutiveParseFailures,

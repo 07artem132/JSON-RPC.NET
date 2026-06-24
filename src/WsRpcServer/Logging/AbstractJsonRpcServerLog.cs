@@ -11,4 +11,8 @@ internal static partial class AbstractJsonRpcServerLog
 {
     [LoggerMessage(EventId = 1000, Level = LogLevel.Error, Message = "Помилка WebSocket сервера: {Error}")]
     public static partial void ServerError(ILogger logger, SocketError error);
+
+    [LoggerMessage(EventId = 1001, Level = LogLevel.Warning,
+        Message = "Відхилено з'єднання: активних {Active} перевищує квоту MaxConcurrentConnections={Max}.")]
+    public static partial void ConnectionRejected(ILogger logger, long active, int max);
 }

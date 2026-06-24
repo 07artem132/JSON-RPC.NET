@@ -102,6 +102,7 @@ services.AddJsonRpcCore<
 | `PipeThresholdBytes` | `int` | `1048576` (1 МБ) | `[Range(1, int.MaxValue)]` | `System.IO.Pipelines` pause-writer threshold вхідного потоку транспорту |
 | `NotificationTimeout` | `TimeSpan` | `5 s` | крос-польове: `> TimeSpan.Zero` | Таймаут на надсилання одного сповіщення проблемному клієнту |
 | `MaxConsecutiveParseFailures` | `int` | `10` | `[Range(1, int.MaxValue)]` | Поріг послідовних помилок розбору JSON, після якого з'єднання примусово закривається з `ProtocolError` (anti-DoS, rule #5). Скидається після кожного успішного розбору. Деталі — [`errors.md`](errors.md) |
+| `MaxConcurrentConnections` | `int` | `0` | `[Range(0, int.MaxValue)]` | Квота одночасних з'єднань; `0` = без ліміту. Коли `> 0`, сервер відхиляє з'єднання понад поріг (anti-DoS). Деталі — [`observability.md`](observability.md) |
 
 ```csharp
 services.AddJsonRpcCore<…>(o =>

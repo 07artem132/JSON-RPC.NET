@@ -4,6 +4,154 @@
         <name>WsRpcServer</name>
     </assembly>
     <members>
+        <member name="T:WsRpcServer.Authorization.AuthorizingJsonRpc">
+             <summary>
+             Підклас <see cref="T:StreamJsonRpc.JsonRpc"/>, що примушує <see cref="T:WsRpcServer.Authorization.RpcAuthorizeAttribute"/> на РЕФЛЕКСІЙНОМУ
+             шляху диспетчу (коли сервіси зареєстровані через <c>AddLocalRpcTarget</c>).
+             </summary>
+             <remarks>
+             Перехоплює <see cref="M:StreamJsonRpc.JsonRpc.DispatchRequestAsync(StreamJsonRpc.Protocol.JsonRpcRequest,StreamJsonRpc.TargetMethod,System.Threading.CancellationToken)"/>: перед виконанням знайденого методу звіряє
+             principal сесії з політикою (через <see cref="T:WsRpcServer.Authorization.RpcAuthorizationEnforcer"/>). При відмові кидає
+             <see cref="T:WsRpcServer.Exceptions.RpcErrorException"/> (<c>-32001</c>) — тіло методу не запускається.
+            
+             Споживач, якому потрібна авторизація на рефлексійному шляху, конструює
+             <c>new AuthorizingJsonRpc(handler, principal, policy, logger)</c> замість <c>new JsonRpc(handler)</c>.
+             Source-генерований binder примушує ту саму політику без рефлексії (атрибут читається на компіляції).
+             </remarks>
+        </member>
+        <member name="M:WsRpcServer.Authorization.AuthorizingJsonRpc.#ctor(StreamJsonRpc.IJsonRpcMessageHandler,System.Security.Claims.ClaimsPrincipal,WsRpcServer.Authorization.IRpcAuthorizationPolicy,Microsoft.Extensions.Logging.ILogger)">
+            <summary>
+            Створює авторизуючий JSON-RPC.
+            </summary>
+            <param name="messageHandler">Обробник повідомлень (транспорт).</param>
+            <param name="principal">Principal сесії (з mTLS-ідентичності).</param>
+            <param name="policy">Політика авторизації.</param>
+            <param name="logger">Опційний логер для відмов.</param>
+        </member>
+        <member name="M:WsRpcServer.Authorization.AuthorizingJsonRpc.DispatchRequestAsync(StreamJsonRpc.Protocol.JsonRpcRequest,StreamJsonRpc.TargetMethod,System.Threading.CancellationToken)">
+            <inheritdoc />
+        </member>
+        <member name="T:WsRpcServer.Authorization.IRpcAuthorizationPolicy">
+            <summary>
+            Політика авторизації RPC-викликів: чи дозволено даному principal'у виклик методу з даною вимогою.
+            </summary>
+            <remarks>
+            Типова реалізація <see cref="T:WsRpcServer.Authorization.StaticRoleMapAuthorizationPolicy"/> зіставляє ідентичність вузла
+            зі статичною мапою «ідентичність → ролі» (з конфігурації споживача) і перевіряє членство в ролі.
+            Замінна, щоб споживач міг підключити власне джерело ролей.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Authorization.IRpcAuthorizationPolicy.IsAuthorized(System.Security.Claims.ClaimsPrincipal,WsRpcServer.Authorization.RpcAuthorizeAttribute)">
+            <summary>
+            Чи задовольняє <paramref name="principal"/> вимогу <paramref name="requirement"/>.
+            </summary>
+            <param name="principal">Principal сесії (з mTLS-ідентичності), або <c>null</c>, якщо неавтентифікований.</param>
+            <param name="requirement">Вимога авторизації з атрибута <see cref="T:WsRpcServer.Authorization.RpcAuthorizeAttribute"/>.</param>
+            <returns><c>true</c>, якщо виклик дозволено; інакше <c>false</c> (deny).</returns>
+        </member>
+        <member name="T:WsRpcServer.Authorization.RpcAuthorizationEnforcer">
+            <summary>
+            Єдина точка примусу авторизації для ОБОХ шляхів диспетчу (рефлексійного та source-генерованого
+            binder'а). Кидає <see cref="T:WsRpcServer.Exceptions.RpcErrorException"/> з кодом <c>-32001</c> при відмові — до запуску тіла методу.
+            </summary>
+            <remarks>
+            Тримати перевірку в одному місці критично: інакше два шляхи диспетчу могли б розійтися в семантиці
+            «дозволено/відмовлено». Binder викликає цей метод у голові згенерованого делегата, а рефлексійний
+            <see cref="T:WsRpcServer.Authorization.AuthorizingJsonRpc"/> — у <c>DispatchRequestAsync</c>.
+            </remarks>
+        </member>
+        <member name="F:WsRpcServer.Authorization.RpcAuthorizationEnforcer.UnauthorizedErrorCode">
+            <summary>Код помилки JSON-RPC для відмови в авторизації (рівень застосунку).</summary>
+        </member>
+        <member name="M:WsRpcServer.Authorization.RpcAuthorizationEnforcer.Enforce(WsRpcServer.Authorization.IRpcAuthorizationPolicy,System.Security.Claims.ClaimsPrincipal,WsRpcServer.Authorization.RpcAuthorizeAttribute,System.String,Microsoft.Extensions.Logging.ILogger)">
+            <summary>
+            Примушує авторизацію: якщо <paramref name="policy"/> відмовляє (або відсутній), кидає
+            <see cref="T:WsRpcServer.Exceptions.RpcErrorException"/> (<c>-32001</c>).
+            </summary>
+            <param name="policy">Політика авторизації (з DI). <c>null</c> для позначеного методу = deny (fail-closed).</param>
+            <param name="principal">Principal сесії.</param>
+            <param name="requirement">Вимога авторизації з атрибута.</param>
+            <param name="methodName">Ім'я методу (для діагностики/логів).</param>
+            <param name="logger">Опційний логер.</param>
+            <exception cref="T:WsRpcServer.Exceptions.RpcErrorException">Якщо авторизація відмовлена.</exception>
+        </member>
+        <member name="T:WsRpcServer.Authorization.RpcAuthorizationMetadata">
+             <summary>
+             Розв'язує вимогу <see cref="T:WsRpcServer.Authorization.RpcAuthorizeAttribute"/> для методу реалізації — шукаючи атрибут на
+             самому методі, його типі, та на відповідному методі/типі RPC-інтерфейсу.
+             </summary>
+             <remarks>
+             Атрибут зазвичай ставлять на методи ІНТЕРФЕЙСУ, а диспетч має <c>MethodInfo</c> РЕАЛІЗАЦІЇ
+             (<c>TargetMethod.TargetMethodInfo</c>), тож пряме <c>GetCustomAttribute</c> на impl-методі його не
+             побачить. Тут зіставляємо impl-метод із інтерфейсним через мапу інтерфейсів типу.
+            
+             Це рефлексійний шлях (для AOT використовуй source-генерований binder, який читає атрибут на
+             етапі компіляції) — анотовано відповідно.
+             </remarks>
+        </member>
+        <member name="M:WsRpcServer.Authorization.RpcAuthorizationMetadata.Resolve(System.Reflection.MethodInfo)">
+            <summary>
+            Знаходить застосовну вимогу авторизації для методу реалізації, або <c>null</c>, якщо її немає.
+            </summary>
+            <param name="implementationMethod">Метод реалізації (з диспетчу).</param>
+            <returns>Вимога авторизації або <c>null</c>.</returns>
+        </member>
+        <member name="T:WsRpcServer.Authorization.RpcAuthorizeAttribute">
+             <summary>
+             Позначає RPC-метод (або весь RPC-інтерфейс) як такий, що потребує авторизації.
+             </summary>
+             <remarks>
+             Авторизація — deny-by-default ДЛЯ ПОЗНАЧЕНИХ методів: principal без потрібної ролі отримує
+             <see cref="T:WsRpcServer.Exceptions.RpcErrorException"/> (код <c>-32001</c>) ще до виконання тіла методу.
+             Методи без цього атрибута лишаються необмеженими (можливість суто additive).
+            
+             Атрибут можна ставити на інтерфейс (застосовується до всіх його методів) або на окремий метод.
+             Перевірка виконується на обох шляхах диспетчу: рефлексійному (<see cref="T:WsRpcServer.Authorization.AuthorizingJsonRpc"/>)
+             та source-генерованому (<see cref="T:WsRpcServer.Services.IRpcMethodBinder"/>).
+             </remarks>
+        </member>
+        <member name="P:WsRpcServer.Authorization.RpcAuthorizeAttribute.Roles">
+            <summary>
+            Кома-розділений перелік ролей, БУДЬ-ЯКА з яких дозволяє виклик. Порожньо/<c>null</c> —
+            вимагається лише автентифікований principal (будь-яка ідентичність).
+            </summary>
+        </member>
+        <member name="M:WsRpcServer.Authorization.RpcAuthorizeAttribute.GetRequiredRoles">
+            <summary>
+            Розбирає <see cref="P:WsRpcServer.Authorization.RpcAuthorizeAttribute.Roles"/> на нормалізований набір (без порожніх, trimmed).
+            </summary>
+            <returns>Масив необхідних ролей (можливо порожній).</returns>
+        </member>
+        <member name="T:WsRpcServer.Authorization.StaticRoleMapAuthorizationPolicy">
+            <summary>
+            Типова <see cref="T:WsRpcServer.Authorization.IRpcAuthorizationPolicy"/>: ролі беруться зі статичної мапи
+            «ім'я ідентичності (SPIFFE-id / SPKI) → ролі», постаченої споживачем.
+            </summary>
+            <remarks>
+            Кодування ролей у мапі (а не в сертифікаті) розв'язує зміну ролей із переоформленням сертифіката.
+            Принцип авторизації:
+            <list type="bullet">
+              <item>немає principal'а (неавтентифікований) → завжди deny;</item>
+              <item>вимога без ролей → дозволено будь-якому автентифікованому principal'у;</item>
+              <item>вимога з ролями → дозволено, якщо principal має БУДЬ-ЯКУ з них (об'єднання
+                    role-claim'ів principal'а та ролей з мапи за іменем).</item>
+            </list>
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Authorization.StaticRoleMapAuthorizationPolicy.#ctor(System.Collections.Generic.IReadOnlyDictionary{System.String,System.Collections.Generic.IReadOnlyCollection{System.String}})">
+            <summary>
+            Створює політику зі статичною мапою ідентичність → ролі.
+            </summary>
+            <param name="roleMap">Мапа «ім'я ідентичності → набір ролей». Може бути порожньою.</param>
+        </member>
+        <member name="M:WsRpcServer.Authorization.StaticRoleMapAuthorizationPolicy.IsAuthorized(System.Security.Claims.ClaimsPrincipal,WsRpcServer.Authorization.RpcAuthorizeAttribute)">
+            <inheritdoc />
+        </member>
+        <member name="M:WsRpcServer.Authorization.StaticRoleMapAuthorizationPolicy.CollectRoles(System.Security.Claims.ClaimsPrincipal)">
+            <summary>
+            Об'єднує ролі principal'а (role-claim'и) з ролями зі статичної мапи за його іменем.
+            </summary>
+        </member>
         <member name="T:WsRpcServer.Core.AbstractJsonRpcServer">
             <summary>
             Абстрактний базовий клас для JSON-RPC WebSocket серверів.
@@ -38,6 +186,40 @@
             <summary>
             Логер для реєстрації подій сервера.
             </summary>
+        </member>
+        <member name="F:WsRpcServer.Core.AbstractJsonRpcServer._maxConcurrentConnections">
+            <summary>
+            Ліниво-резолвлена квота одночасних з'єднань (<c>0</c> = без ліміту). Резолвиться з
+            <see cref="T:WsRpcServer.Core.JsonRpcServerConfig"/> у DI; <c>0</c>, якщо конфіг недоступний (сервер без DI).
+            </summary>
+        </member>
+        <member name="F:WsRpcServer.Core.AbstractJsonRpcServer._connections">
+            <summary>
+            Маркер «з'єднання зараховано» (для балансу гейджа) + span його життєвого циклу. Слабкі ключі —
+            запис зникає разом із сесією без витоку.
+            </summary>
+        </member>
+        <member name="T:WsRpcServer.Core.AbstractJsonRpcServer.ConnectionState">
+            <summary>Стан зарахованого з'єднання: span (або <c>null</c>, якщо немає слухачів activity).</summary>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractJsonRpcServer.OnConnected(NetCoreServer.TcpSession)">
+            <summary>
+            Обробляє нове TCP-з'єднання: enforce квоти <see cref="P:WsRpcServer.Core.JsonRpcServerConfig.MaxConcurrentConnections"/>
+            + облік активних з'єднань (метрика + span). Викликається NetCoreServer на рівні сервера.
+            </summary>
+            <param name="session">Нова сесія.</param>
+            <remarks>
+            Це серверний seam (не споживацький <c>OnWsConnected</c> сесії), тож інструментація/квота не
+            конфліктують із бізнес-логікою похідної сесії. Відхилене за квотою з'єднання НЕ зараховується в
+            гейдж і не доходить до RPC-диспетчу.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractJsonRpcServer.OnDisconnected(NetCoreServer.TcpSession)">
+            <summary>
+            Обробляє розрив TCP-з'єднання: знімає облік активних з'єднань + завершує span (лише для
+            зарахованих з'єднань — відхилені за квотою ігноруються).
+            </summary>
+            <param name="session">Сесія, що від'єдналася.</param>
         </member>
         <member name="M:WsRpcServer.Core.AbstractJsonRpcServer.CreateSession">
             <summary>
@@ -81,6 +263,61 @@
             Використовується для розширення обробки помилок без перевизначення базового методу OnError.
             Порожня реалізація за замовчуванням дозволяє похідним класам реагувати лише при необхідності.
             </remarks>
+        </member>
+        <member name="T:WsRpcServer.Core.AbstractSecureJsonRpcServer">
+             <summary>
+             Абстрактний базовий клас для ЗАХИЩЕНИХ (TLS / mTLS) JSON-RPC WebSocket серверів.
+             Наслідується від <see cref="T:NetCoreServer.WssServer"/> (NetCoreServer) і обслуговує <c>wss://</c>.
+             </summary>
+             <remarks>
+             Дзеркалить <see cref="T:WsRpcServer.Core.AbstractJsonRpcServer"/>: той самий розширювальний шов
+             <see cref="M:WsRpcServer.Core.AbstractSecureJsonRpcServer.CreateJsonRpcSession"/>, лише з SSL-базою та <see cref="T:NetCoreServer.SslContext"/>. Плейн-текст
+             <see cref="T:WsRpcServer.Core.AbstractJsonRpcServer"/> лишається незмінним — TLS це opt-in additive-можливість.
+            
+             Сесія дістає валідовану <see cref="T:WsRpcServer.Security.NodeIdentity"/> через <see cref="M:WsRpcServer.Core.AbstractSecureJsonRpcServer.TryResolveNodeIdentity(NetCoreServer.WssSession,WsRpcServer.Security.NodeIdentity@)"/>
+             (кореляція за SSL-потоком, заповнена під час mTLS-рукостискання у <see cref="T:WsRpcServer.Security.SecureTransport"/>).
+             </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractSecureJsonRpcServer.#ctor(WsRpcServer.Security.SecureTransport,System.Net.IPAddress,System.Int32,System.IServiceProvider,Microsoft.Extensions.Logging.ILogger)">
+            <summary>
+            Створює захищений сервер.
+            </summary>
+            <param name="transport">Зібраний TLS-транспорт (<see cref="T:NetCoreServer.SslContext"/> + кореляція ідентичності).</param>
+            <param name="address">IP-адреса прослуховування.</param>
+            <param name="port">Порт.</param>
+            <param name="serviceProvider">Постачальник сервісів (для створення сесій).</param>
+            <param name="logger">Логер.</param>
+        </member>
+        <member name="P:WsRpcServer.Core.AbstractSecureJsonRpcServer.ServiceProvider">
+            <summary>
+            Постачальник сервісів для створення екземплярів залежностей.
+            </summary>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractSecureJsonRpcServer.CreateSession">
+            <inheritdoc />
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractSecureJsonRpcServer.CreateJsonRpcSession">
+            <summary>
+            Створює нову спеціалізовану захищену сесію JSON-RPC (нащадок <see cref="T:NetCoreServer.WssSession"/>).
+            </summary>
+            <returns>Спеціалізований екземпляр <see cref="T:NetCoreServer.WssSession"/> для обробки JSON-RPC повідомлень.</returns>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractSecureJsonRpcServer.TryResolveNodeIdentity(NetCoreServer.WssSession,WsRpcServer.Security.NodeIdentity@)">
+            <summary>
+            Спроба дістати валідовану <see cref="T:WsRpcServer.Security.NodeIdentity"/> для сесії (за її SSL-потоком).
+            </summary>
+            <param name="session">Захищена сесія.</param>
+            <param name="identity">Виведена ідентичність, якщо знайдена.</param>
+            <returns><c>true</c>, якщо ідентичність знайдено (валідне mTLS-рукостискання відбулося).</returns>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractSecureJsonRpcServer.OnError(System.Net.Sockets.SocketError)">
+            <inheritdoc />
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractSecureJsonRpcServer.OnServerError(System.Net.Sockets.SocketError)">
+            <summary>
+            Викликається при виникненні помилки сервера. Дозволяє похідним класам реагувати особливим чином.
+            </summary>
+            <param name="error">Помилка сокета.</param>
         </member>
         <member name="T:WsRpcServer.Core.AbstractSubscriptionStore`3">
             <summary>
@@ -602,6 +839,17 @@
             кожного успішного розбору повідомлення.
             </remarks>
         </member>
+        <member name="P:WsRpcServer.Core.JsonRpcServerConfig.MaxConcurrentConnections">
+            <summary>
+            Максимальна кількість одночасних з'єднань. <c>0</c> (за замовчуванням) = без ліміту.
+            </summary>
+            <remarks>
+            Квота захисту від вичерпання ресурсів (доповнює <see cref="P:WsRpcServer.Core.JsonRpcServerConfig.MaxMessageSizeBytes"/> та
+            <see cref="P:WsRpcServer.Core.JsonRpcServerConfig.MaxConsecutiveParseFailures"/>). Коли <c>&gt; 0</c> і кількість активних з'єднань
+            перевищує цей поріг, сервер відхиляє нове з'єднання (розриває його) ще до RPC-диспетчу.
+            <c>0</c> зберігає необмежену поведінку (additive).
+            </remarks>
+        </member>
         <member name="T:WsRpcServer.Core.JsonRpcServerConfigValidator">
              <summary>
              Валідатор конфігурації <see cref="T:WsRpcServer.Core.JsonRpcServerConfig"/>, згенерований під час компіляції.
@@ -627,6 +875,53 @@
             <param name="name">The name of the options instance being validated.</param>
             <param name="options">The options instance.</param>
             <returns>Validation result.</returns>
+        </member>
+        <member name="T:WsRpcServer.Diagnostics.WsRpcServerDiagnostics">
+             <summary>
+             Спільні джерела телеметрії бібліотеки: <see cref="T:System.Diagnostics.Metrics.Meter"/> та
+             <see cref="T:System.Diagnostics.ActivitySource"/> з ім'ям <c>"WsRpcServer"</c>.
+             </summary>
+             <remarks>
+             Приватність — інваріант (дзеркало SignalCli.NET): теги вимірів походять ЛИШЕ з фіксованого безпечного
+             набору <see cref="P:WsRpcServer.Diagnostics.WsRpcServerDiagnostics.AllowedTagKeys"/> (статуси/енум-літерали), НІКОЛИ не несуть тіл повідомлень, номерів,
+             чи секретів ідентичності. Інструментація інертна без підписників (pull/opt-in), тож не впливає на
+             поведінку чи продуктивність, якщо ніхто не слухає.
+            
+             Імена інструментів — крапко-розділені (<c>wsrpc.*</c>), як радить OpenTelemetry-конвенція.
+             </remarks>
+        </member>
+        <member name="F:WsRpcServer.Diagnostics.WsRpcServerDiagnostics.SourceName">
+            <summary>Ім'я <see cref="T:System.Diagnostics.Metrics.Meter"/> та <see cref="T:System.Diagnostics.ActivitySource"/>.</summary>
+        </member>
+        <member name="F:WsRpcServer.Diagnostics.WsRpcServerDiagnostics.ResultTagKey">
+            <summary>Ключ тегу для результату операції (єдиний дозволений тег-ключ).</summary>
+        </member>
+        <member name="P:WsRpcServer.Diagnostics.WsRpcServerDiagnostics.AllowedTagKeys">
+            <summary>Фіксований allowlist тег-ключів — privacy-guard звіряє захоплені виміри з ним.</summary>
+        </member>
+        <member name="P:WsRpcServer.Diagnostics.WsRpcServerDiagnostics.ActivitySource">
+            <summary>Джерело activity-span'ів (життєвий цикл з'єднання).</summary>
+        </member>
+        <member name="M:WsRpcServer.Diagnostics.WsRpcServerDiagnostics.ConnectionOpened">
+            <summary>Збільшує гейдж активних з'єднань (з'єднання зараховано).</summary>
+        </member>
+        <member name="M:WsRpcServer.Diagnostics.WsRpcServerDiagnostics.ConnectionClosed">
+            <summary>Зменшує гейдж активних з'єднань (зараховане з'єднання розірвано).</summary>
+        </member>
+        <member name="M:WsRpcServer.Diagnostics.WsRpcServerDiagnostics.ConnectionRejected">
+            <summary>Лічить відхилене за квотою з'єднання.</summary>
+        </member>
+        <member name="M:WsRpcServer.Diagnostics.WsRpcServerDiagnostics.Notification(System.Boolean)">
+            <summary>Лічить сповіщення з тегом <c>result</c> (<c>queued</c>/<c>dropped</c>).</summary>
+        </member>
+        <member name="M:WsRpcServer.Diagnostics.WsRpcServerDiagnostics.ParseFailure">
+            <summary>Лічить невдалий розбір JSON.</summary>
+        </member>
+        <member name="M:WsRpcServer.Diagnostics.WsRpcServerDiagnostics.AuthorizationDenied">
+            <summary>Лічить відмову авторизації.</summary>
+        </member>
+        <member name="M:WsRpcServer.Diagnostics.WsRpcServerDiagnostics.StartConnectionActivity">
+            <summary>Стартує span життєвого циклу з'єднання (або <c>null</c>, якщо немає слухачів).</summary>
         </member>
         <member name="T:WsRpcServer.Events.AbstractEventProcessor">
              <summary>
@@ -1080,6 +1375,43 @@
             реєстрацій (споживач може зареєструвати власну реалізацію до виклику цього методу).
             </remarks>
         </member>
+        <member name="T:WsRpcServer.Extensions.SecureJsonRpcCoreExtensions">
+            <summary>
+            Композиційний корінь для ЗАХИЩЕНОГО (TLS / mTLS) JSON-RPC сервера. Паралельний до
+            <see cref="M:WsRpcServer.Extensions.JsonRpcCoreExtensions.AddJsonRpcCore(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{WsRpcServer.Core.JsonRpcServerConfig})"/> — плейн-текст шлях лишається незмінним.
+            </summary>
+        </member>
+        <member name="M:WsRpcServer.Extensions.SecureJsonRpcCoreExtensions.AddSecureTransport(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{WsRpcServer.Security.TlsServerOptions})">
+            <summary>
+            Реєструє валідовані <see cref="T:WsRpcServer.Security.TlsServerOptions"/> + типові mTLS-сервіси (валідатор сертифіката,
+            резолвер ідентичності, політику авторизації) та <see cref="T:WsRpcServer.Security.SecureTransport"/>.
+            </summary>
+            <param name="services">Колекція сервісів.</param>
+            <param name="configureTls">Дія налаштування TLS-опцій (серверний сертифікат обов'язковий).</param>
+            <returns>Колекція сервісів для ланцюжка.</returns>
+            <remarks>
+            <see cref="T:WsRpcServer.Security.TlsServerOptions"/> валідується fail-fast (source-gen <see cref="T:WsRpcServer.Security.TlsServerOptionsValidator"/>
+            для <c>[Required]</c> + крос-польове правило «серверний сертифікат має приватний ключ»). Невалідна
+            конфігурація кидає <see cref="T:Microsoft.Extensions.Options.OptionsValidationException"/> на резолві, а не глибоко в рукостисканні.
+            Усі реєстрації — <c>TryAdd*</c>, тож споживач може підмінити будь-який тип своїм до виклику.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Extensions.SecureJsonRpcCoreExtensions.AddSecureJsonRpcCore``7(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{WsRpcServer.Core.JsonRpcServerConfig},System.Action{WsRpcServer.Security.TlsServerOptions})">
+            <summary>
+            Повний композиційний корінь захищеного сервера: усі core-сервіси + захищений сервер із TLS/mTLS.
+            </summary>
+            <typeparam name="TServer">Конкретний захищений сервер (нащадок <see cref="T:WsRpcServer.Core.AbstractSecureJsonRpcServer"/>).</typeparam>
+            <typeparam name="TSession">Конкретна захищена сесія (нащадок <see cref="T:WsRpcServer.Sessions.AbstractSecureJsonRpcSession"/>).</typeparam>
+            <typeparam name="TEventProcessor">Обробник подій.</typeparam>
+            <typeparam name="TSubscriptionManager">Менеджер підписок.</typeparam>
+            <typeparam name="TRegistry">Реєстр RPC-сервісів.</typeparam>
+            <typeparam name="TEventType">Тип події.</typeparam>
+            <typeparam name="TEventArgs">Тип аргументів події.</typeparam>
+            <param name="services">Колекція сервісів.</param>
+            <param name="configureOptions">Налаштування <see cref="T:WsRpcServer.Core.JsonRpcServerConfig"/>.</param>
+            <param name="configureTls">Налаштування <see cref="T:WsRpcServer.Security.TlsServerOptions"/>.</param>
+            <returns>Колекція сервісів для ланцюжка.</returns>
+        </member>
         <member name="T:WsRpcServer.Logging.AbstractEventProcessorLog">
             <summary>
             Source-generated логи для <see cref="T:WsRpcServer.Events.AbstractEventProcessor"/>.
@@ -1104,11 +1436,373 @@
             EventId-блок 1300–1399.
             </summary>
         </member>
+        <member name="T:WsRpcServer.Logging.AbstractSecureJsonRpcServerLog">
+            <summary>
+            Source-generated логи для <see cref="T:WsRpcServer.Core.AbstractSecureJsonRpcServer"/>.
+            EventId-блок 1500–1549 (захищений транспорт).
+            </summary>
+        </member>
+        <member name="T:WsRpcServer.Logging.NodeCertificateValidatorLog">
+            <summary>
+            Source-generated логи для <see cref="T:WsRpcServer.Security.CustomRootTrustValidator"/> та резолву ідентичності.
+            EventId-блок 1550–1599 (mTLS node identity).
+            </summary>
+            <remarks>
+            Приватність: логуємо лише SPKI-відбиток, Subject DN, SPIFFE-id та рішення — НІКОЛИ приватний ключ
+            чи повний PEM сертифіката.
+            </remarks>
+        </member>
+        <member name="T:WsRpcServer.Logging.RpcAuthorizationLog">
+            <summary>
+            Source-generated логи для авторизації RPC-викликів.
+            EventId-блок 1600–1699 (authorization).
+            </summary>
+            <remarks>
+            Приватність: логуємо ім'я методу та ім'я ідентичності (SPIFFE-id / SPKI) — не вміст запиту.
+            </remarks>
+        </member>
         <member name="T:WsRpcServer.Logging.WebSocketMessageHandlerLog">
             <summary>
             Source-generated логи для <see cref="T:WsRpcServer.Transport.WebSocketMessageHandler"/>.
             EventId-блок 1200–1299.
             </summary>
+        </member>
+        <member name="T:WsRpcServer.Security.CustomRootTrustValidator">
+            <summary>
+            Типовий <see cref="T:WsRpcServer.Security.INodeCertificateValidator"/>: будує власний <see cref="T:System.Security.Cryptography.X509Certificates.X509Chain"/> з
+            <see cref="F:System.Security.Cryptography.X509Certificates.X509ChainTrustMode.CustomRootTrust"/> + приватним CA, вимагає EKU <c>clientAuth</c>,
+            відхиляє на будь-якій помилці ланцюга та (опційно) звіряє SPKI-пін.
+            </summary>
+            <remarks>
+            Чому власний ланцюг, а не машинне сховище: довіра має бути обмежена приватним CA розгортання
+            (<see cref="F:System.Security.Cryptography.X509Certificates.X509ChainTrustMode.CustomRootTrust"/> + <see cref="P:System.Security.Cryptography.X509Certificates.X509ChainPolicy.CustomTrustStore"/>),
+            інакше будь-який публічно довірений CA міг би видати «валідний» клієнтський сертифікат.
+            Режим відкликання за замовчуванням <see cref="F:System.Security.Cryptography.X509Certificates.X509RevocationMode.Offline"/> — щоб уникнути
+            DoS під час рукостискання на повільному OCSP/CRL-респондері.
+            </remarks>
+        </member>
+        <member name="F:WsRpcServer.Security.CustomRootTrustValidator.ClientAuthEku">
+            <summary>OID розширеного використання ключа <c>clientAuth</c> (1.3.6.1.5.5.7.3.2).</summary>
+        </member>
+        <member name="M:WsRpcServer.Security.CustomRootTrustValidator.#ctor(System.Collections.Generic.IReadOnlyCollection{System.Security.Cryptography.X509Certificates.X509Certificate2},System.Collections.Generic.IReadOnlyCollection{System.String},System.Security.Cryptography.X509Certificates.X509RevocationMode,Microsoft.Extensions.Logging.ILogger)">
+            <summary>
+            Створює валідатор.
+            </summary>
+            <param name="trustedRoots">Довірені корені (приватний CA). Не може бути порожнім для робочого mTLS.</param>
+            <param name="spkiPins">Опційний allowlist SPKI-SHA-256 пінів (hex). Порожній — пін вимкнено.</param>
+            <param name="revocationMode">Режим перевірки відкликання.</param>
+            <param name="logger">Логер.</param>
+        </member>
+        <member name="M:WsRpcServer.Security.CustomRootTrustValidator.Validate(System.Security.Cryptography.X509Certificates.X509Certificate2,System.Security.Cryptography.X509Certificates.X509Chain,System.Net.Security.SslPolicyErrors)">
+            <inheritdoc />
+        </member>
+        <member name="T:WsRpcServer.Security.INodeCertificateValidator">
+            <summary>
+            Валідатор клієнтського сертифіката для mTLS — викликається з
+            <c>SslContext.RemoteCertificateValidationCallback</c> під час рукостискання.
+            </summary>
+            <remarks>
+            NetCoreServer автентифікує через <c>BeginAuthenticateAsServer</c>, тож декларативний
+            <c>SslServerAuthenticationOptions.CertificateChainPolicy</c> недоступний — уся кастомна валідація
+            (побудова <see cref="T:System.Security.Cryptography.X509Certificates.X509Chain"/>, <see cref="F:System.Security.Cryptography.X509Certificates.X509ChainTrustMode.CustomRootTrust"/>, EKU, SPKI-піни)
+            має відбуватися всередині callback'а. Реалізація НІКОЛИ не сміє повертати <c>true</c> «наосліп» —
+            це сенс існування callback'а (Roslyn-guard пінує заборону <c>=> true</c>).
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Security.INodeCertificateValidator.Validate(System.Security.Cryptography.X509Certificates.X509Certificate2,System.Security.Cryptography.X509Certificates.X509Chain,System.Net.Security.SslPolicyErrors)">
+            <summary>
+            Валідує презентований клієнтський сертифікат.
+            </summary>
+            <param name="certificate">Презентований сертифікат (може бути <c>null</c>, якщо клієнт його не надіслав).</param>
+            <param name="chain">Ланцюг, побудований середовищем (не використовується — будуємо власний).</param>
+            <param name="sslPolicyErrors">Помилки політики SSL, виявлені середовищем.</param>
+            <returns><c>true</c>, якщо сертифікат валідний і з'єднання можна продовжити; інакше <c>false</c>.</returns>
+        </member>
+        <member name="T:WsRpcServer.Security.INodeIdentityResolver">
+            <summary>
+            Перетворює валідований клієнтський сертифікат на <see cref="T:WsRpcServer.Security.NodeIdentity"/>.
+            </summary>
+            <remarks>
+            Замінний, щоб споживач міг виводити ідентичність з іншого поля (наприклад OU) без форку фреймворку.
+            Типова реалізація <see cref="T:WsRpcServer.Security.SpiffeNodeIdentityResolver"/> бере SAN URI (SPIFFE), з SPKI-fallback.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Security.INodeIdentityResolver.Resolve(System.Security.Cryptography.X509Certificates.X509Certificate2)">
+            <summary>
+            Виводить <see cref="T:WsRpcServer.Security.NodeIdentity"/> з валідованого сертифіката.
+            </summary>
+            <param name="certificate">Валідований клієнтський сертифікат.</param>
+            <returns>Ідентичність вузла.</returns>
+        </member>
+        <member name="T:WsRpcServer.Security.NodeIdentity">
+            <summary>
+            Ідентичність вузла (machine-to-machine), виведена з валідованого клієнтського сертифіката.
+            </summary>
+            <param name="SpiffeId">SAN URI (SPIFFE-стиль), якщо присутній — основне ім'я principal'а.</param>
+            <param name="SpkiThumbprint">SHA-256 від <c>SubjectPublicKeyInfo</c> (hex) — стабільний fallback-id.</param>
+            <param name="Subject">Subject DN сертифіката (для діагностики/логів).</param>
+            <remarks>
+            <see cref="P:WsRpcServer.Security.NodeIdentity.SpkiThumbprint"/> стабільний при переоформленні сертифіката з тим самим ключем, тож
+            слугує надійним ідентифікатором навіть без SAN URI. Це <c>readonly record struct</c> — порівнюється
+            за значенням і не алокує на купі.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Security.NodeIdentity.#ctor(System.Uri,System.String,System.String)">
+            <summary>
+            Ідентичність вузла (machine-to-machine), виведена з валідованого клієнтського сертифіката.
+            </summary>
+            <param name="SpiffeId">SAN URI (SPIFFE-стиль), якщо присутній — основне ім'я principal'а.</param>
+            <param name="SpkiThumbprint">SHA-256 від <c>SubjectPublicKeyInfo</c> (hex) — стабільний fallback-id.</param>
+            <param name="Subject">Subject DN сертифіката (для діагностики/логів).</param>
+            <remarks>
+            <see cref="P:WsRpcServer.Security.NodeIdentity.SpkiThumbprint"/> стабільний при переоформленні сертифіката з тим самим ключем, тож
+            слугує надійним ідентифікатором навіть без SAN URI. Це <c>readonly record struct</c> — порівнюється
+            за значенням і не алокує на купі.
+            </remarks>
+        </member>
+        <member name="P:WsRpcServer.Security.NodeIdentity.SpiffeId">
+            <summary>SAN URI (SPIFFE-стиль), якщо присутній — основне ім'я principal'а.</summary>
+        </member>
+        <member name="P:WsRpcServer.Security.NodeIdentity.SpkiThumbprint">
+            <summary>SHA-256 від <c>SubjectPublicKeyInfo</c> (hex) — стабільний fallback-id.</summary>
+        </member>
+        <member name="P:WsRpcServer.Security.NodeIdentity.Subject">
+            <summary>Subject DN сертифіката (для діагностики/логів).</summary>
+        </member>
+        <member name="P:WsRpcServer.Security.NodeIdentity.Name">
+            <summary>
+            Стабільне ім'я principal'а: <see cref="P:WsRpcServer.Security.NodeIdentity.SpiffeId"/>, якщо є, інакше — <see cref="P:WsRpcServer.Security.NodeIdentity.SpkiThumbprint"/>.
+            </summary>
+        </member>
+        <member name="M:WsRpcServer.Security.NodeIdentity.ComputeSpkiThumbprint(System.Security.Cryptography.X509Certificates.X509Certificate2)">
+            <summary>
+            Обчислює SHA-256 hex-відбиток <c>SubjectPublicKeyInfo</c> сертифіката (SPKI-пін).
+            </summary>
+            <param name="certificate">Сертифікат, з якого береться публічний ключ.</param>
+            <returns>Hex-рядок SHA-256 (великими літерами, без розділювачів).</returns>
+            <remarks>
+            Хешується саме <c>SubjectPublicKeyInfo</c> (а не весь сертифікат), тож відбиток не змінюється
+            при переоформленні з тим самим ключем — на відміну від <see cref="P:System.Security.Cryptography.X509Certificates.X509Certificate2.Thumbprint"/>.
+            </remarks>
+        </member>
+        <member name="T:WsRpcServer.Security.NodeIdentityPrincipalFactory">
+            <summary>
+            Будує <see cref="T:System.Security.Claims.ClaimsPrincipal"/> з валідованої <see cref="T:WsRpcServer.Security.NodeIdentity"/>.
+            </summary>
+            <remarks>
+            Ім'я principal'а — <see cref="P:WsRpcServer.Security.NodeIdentity.Name"/> (SPIFFE-id або SPKI-fallback). Тип
+            автентифікації <c>"mtls"</c> робить <see cref="P:System.Security.Principal.IIdentity.IsAuthenticated"/>
+            = <c>true</c> (важливо для deny-by-default: неавтентифікований principal завжди deny). SPKI
+            додається окремим claim'ом <c>"spki"</c> для діагностики/політик.
+            </remarks>
+        </member>
+        <member name="F:WsRpcServer.Security.NodeIdentityPrincipalFactory.SpkiClaimType">
+            <summary>Тип claim'у для SPKI-SHA-256 відбитка.</summary>
+        </member>
+        <member name="F:WsRpcServer.Security.NodeIdentityPrincipalFactory.AuthenticationType">
+            <summary>Тип автентифікації, що позначає mTLS-ідентичність.</summary>
+        </member>
+        <member name="M:WsRpcServer.Security.NodeIdentityPrincipalFactory.Create(WsRpcServer.Security.NodeIdentity)">
+            <summary>
+            Створює автентифікований <see cref="T:System.Security.Claims.ClaimsPrincipal"/> для ідентичності вузла.
+            </summary>
+            <param name="identity">Валідована ідентичність вузла.</param>
+            <returns>Principal із claim'ами name + spki (+ SPIFFE-id, якщо є).</returns>
+        </member>
+        <member name="T:WsRpcServer.Security.SecureTransport">
+             <summary>
+             Зібраний TLS-транспорт: побудований один раз <see cref="T:NetCoreServer.SslContext"/> плюс кореляція
+             «з'єднання → <see cref="T:WsRpcServer.Security.NodeIdentity"/>», заповнювана під час mTLS-рукостискання.
+             </summary>
+             <remarks>
+             NetCoreServer ставить ОДИН <c>RemoteCertificateValidationCallback</c> на весь
+             <see cref="T:NetCoreServer.SslContext"/>; його <c>sender</c> — це <see cref="T:System.Net.Security.SslStream"/>
+             конкретної сесії. Тому валідовану ідентичність ми кладемо у
+             <see cref="T:System.Runtime.CompilerServices.ConditionalWeakTable`2"/> за ключем-потоком, а сесія дістає її у
+             <c>OnWsConnected</c> (після рукостискання). Слабкі ключі гарантують, що запис зникає разом із
+             потоком — без витоку пам'яті.
+            
+             Сам <see cref="T:NetCoreServer.SslContext"/> + ланцюг сертифіката будуються РІВНО ОДИН раз у
+             <see cref="M:WsRpcServer.Security.SecureTransport.Create(WsRpcServer.Security.TlsServerOptions,WsRpcServer.Security.INodeCertificateValidator,WsRpcServer.Security.INodeIdentityResolver,Microsoft.Extensions.Logging.ILogger)"/> (побудова — CPU-затратна).
+             </remarks>
+        </member>
+        <member name="P:WsRpcServer.Security.SecureTransport.Context">
+            <summary>Побудований <see cref="T:NetCoreServer.SslContext"/> для <see cref="T:WsRpcServer.Core.AbstractSecureJsonRpcServer"/>.</summary>
+        </member>
+        <member name="M:WsRpcServer.Security.SecureTransport.Create(WsRpcServer.Security.TlsServerOptions,WsRpcServer.Security.INodeCertificateValidator,WsRpcServer.Security.INodeIdentityResolver,Microsoft.Extensions.Logging.ILogger)">
+            <summary>
+            Будує <see cref="T:WsRpcServer.Security.SecureTransport"/> з валідованих опцій: <see cref="T:NetCoreServer.SslContext"/> із колбеком
+            валідації клієнтського сертифіката (mTLS) поверх <paramref name="validator"/> та
+            <paramref name="resolver"/>.
+            </summary>
+            <param name="options">Валідовані TLS-опції (серверний сертифікат, протоколи, вимога клієнт-серта).</param>
+            <param name="validator">Валідатор клієнтського сертифіката (mTLS).</param>
+            <param name="resolver">Резолвер ідентичності вузла з валідованого сертифіката.</param>
+            <param name="logger">Логер.</param>
+            <returns>Готовий транспорт.</returns>
+        </member>
+        <member name="M:WsRpcServer.Security.SecureTransport.TryGetIdentity(System.Object,WsRpcServer.Security.NodeIdentity@)">
+            <summary>
+            Спроба дістати валідовану ідентичність вузла для з'єднання за його SSL-потоком.
+            </summary>
+            <param name="sslStream">SSL-потік сесії (ключ кореляції).</param>
+            <param name="identity">Виведена ідентичність, якщо знайдена.</param>
+            <returns><c>true</c>, якщо ідентичність знайдено.</returns>
+        </member>
+        <member name="T:WsRpcServer.Security.SpiffeNodeIdentityResolver">
+            <summary>
+            Типовий <see cref="T:WsRpcServer.Security.INodeIdentityResolver"/>: бере перший SAN URI (SPIFFE-стиль) як ім'я principal'а,
+            а SPKI-SHA-256 — як стабільний fallback-id.
+            </summary>
+            <remarks>
+            SAN URI читається з розширення Subject Alternative Name (OID 2.5.29.17). Якщо URI відсутній,
+            <see cref="P:WsRpcServer.Security.NodeIdentity.SpiffeId"/> = <c>null</c>, і стабільним ідентифікатором лишається
+            <see cref="P:WsRpcServer.Security.NodeIdentity.SpkiThumbprint"/>.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Security.SpiffeNodeIdentityResolver.Resolve(System.Security.Cryptography.X509Certificates.X509Certificate2)">
+            <inheritdoc />
+        </member>
+        <member name="F:WsRpcServer.Security.SpiffeNodeIdentityResolver.SubjectAltNameOid">
+            <summary>OID розширення Subject Alternative Name.</summary>
+        </member>
+        <member name="F:WsRpcServer.Security.SpiffeNodeIdentityResolver.UriTag">
+            <summary>Контекстний тег [6] (uniformResourceIdentifier) у GeneralName.</summary>
+        </member>
+        <member name="M:WsRpcServer.Security.SpiffeNodeIdentityResolver.ExtractFirstUriSan(System.Security.Cryptography.X509Certificates.X509Certificate2)">
+            <summary>
+            Витягує перший SAN URI з сертифіката, або <c>null</c>, якщо його немає.
+            </summary>
+            <remarks>
+            BCL (.NET 10) у <see cref="T:System.Security.Cryptography.X509Certificates.X509SubjectAlternativeNameExtension"/> вміє перелічувати лише DNS/IP,
+            тож URI-імена (SPIFFE) розбираємо вручну з ASN.1: SAN = <c>SEQUENCE OF GeneralName</c>, де URI —
+            контекстний тег <c>[6] IA5String</c>.
+            </remarks>
+        </member>
+        <member name="T:WsRpcServer.Security.SslSessionInterop">
+             <summary>
+             Доступ до приватного <c>SslStream</c> сесії NetCoreServer — ключа кореляції з валідованою
+             ідентичністю (<see cref="M:WsRpcServer.Security.SecureTransport.TryGetIdentity(System.Object,WsRpcServer.Security.NodeIdentity@)"/>).
+             </summary>
+             <remarks>
+             NetCoreServer тримає <c>SslSession._sslStream</c> приватним і НЕ дає публічного доступу до
+             презентованого клієнтського сертифіката чи власне потоку. Єдиний колбек валідації
+             (<c>RemoteCertificateValidationCallback</c>) отримує <c>SslStream</c> як <c>sender</c>, тож щоб
+             зіставити «валідація → сесія», сесії потрібен власний <c>SslStream</c>. Це транспортна «glue»-ланка,
+             а не диспетч-шлях: один кешований <see cref="T:System.Reflection.FieldInfo"/>, читаний раз на з'єднання. Якщо майбутня
+             версія NetCoreServer перейменує поле, <see cref="M:WsRpcServer.Security.SslSessionInterop.TryGetSslStream(NetCoreServer.SslSession,System.Object@)"/> поверне <c>false</c>, і
+             ідентичність просто не встановиться (fail-closed для авторизації) — без падіння транспорту.
+            
+             justification: рефлексія тут — вимушений обхід відсутнього публічного API NetCoreServer, поза
+             AOT-диспетч-шляхом; анотовано для чесності перед trimming.
+             </remarks>
+        </member>
+        <member name="M:WsRpcServer.Security.SslSessionInterop.TryGetSslStream(NetCoreServer.SslSession,System.Object@)">
+            <summary>
+            Дістає приватний <c>SslStream</c> сесії, якщо доступний.
+            </summary>
+            <param name="session">SSL-сесія NetCoreServer.</param>
+            <param name="sslStream">Потік, якщо знайдено.</param>
+            <returns><c>true</c>, якщо поле прочитано й містить значення.</returns>
+        </member>
+        <member name="T:WsRpcServer.Security.TlsServerOptions">
+             <summary>
+             Конфігурація TLS-транспорту для <see cref="T:WsRpcServer.Core.AbstractSecureJsonRpcServer"/>.
+             Валідується fail-fast через options-pipeline (як <see cref="T:WsRpcServer.Core.JsonRpcServerConfig"/>).
+             </summary>
+             <remarks>
+             Жодного секретного матеріалу не «зашито» у код: серверний сертифікат постачає споживач.
+             За замовчуванням узгоджуються лише TLS 1.3 та TLS 1.2 (старіші протоколи відхиляються);
+             <see cref="P:WsRpcServer.Security.TlsServerOptions.ClientCertificateRequired"/> вмикає mTLS (вимога клієнтського сертифіката на рукостисканні).
+            
+             Поля довіри для mTLS (<see cref="P:WsRpcServer.Security.TlsServerOptions.TrustedRoots"/>, <see cref="P:WsRpcServer.Security.TlsServerOptions.SpkiPins"/>,
+             <see cref="P:WsRpcServer.Security.TlsServerOptions.RevocationMode"/>) використовує <see cref="T:WsRpcServer.Security.INodeCertificateValidator"/>; вони лишаються
+             порожніми/типовими для суто серверного TLS без клієнтських сертифікатів.
+             </remarks>
+        </member>
+        <member name="P:WsRpcServer.Security.TlsServerOptions.ServerCertificate">
+            <summary>
+            Серверний сертифікат (з приватним ключем) для TLS-рукостискання.
+            Обов'язковий — без нього <c>OptionsValidationException</c> на резолві.
+            </summary>
+            <remarks>
+            Має містити приватний ключ (<see cref="P:System.Security.Cryptography.X509Certificates.X509Certificate2.HasPrivateKey"/> = true), інакше
+            сервер не зможе завершити рукостискання. Сертифікат будується один раз і перевикористовується
+            (побудова ланцюга — CPU-затратна; перевикористання дозволяє відновлення TLS-сесій на Linux).
+            </remarks>
+        </member>
+        <member name="P:WsRpcServer.Security.TlsServerOptions.SslProtocols">
+            <summary>
+            Дозволені версії протоколу TLS. За замовчуванням TLS 1.3 із fallback на TLS 1.2.
+            </summary>
+            <remarks>
+            Старіші протоколи (TLS 1.0/1.1, SSL 3.0) свідомо не вмикаються — вони мають відомі вади.
+            Не використовуй <see cref="F:System.Security.Authentication.SslProtocols.None"/> «щоб ОС обрала» без розуміння наслідків:
+            явний перелік тут — частина безпекового контракту.
+            </remarks>
+        </member>
+        <member name="P:WsRpcServer.Security.TlsServerOptions.ClientCertificateRequired">
+            <summary>
+            Вимагати клієнтський сертифікат на рукостисканні (вмикає mTLS). За замовчуванням <c>true</c>.
+            </summary>
+            <remarks>
+            Коли <c>true</c>, сервер встановлює <c>SslContext.ClientCertificateRequired = true</c>, а
+            презентований сертифікат проходить через <see cref="T:WsRpcServer.Security.INodeCertificateValidator"/>.
+            </remarks>
+        </member>
+        <member name="P:WsRpcServer.Security.TlsServerOptions.TrustedRoots">
+            <summary>
+            Довірені корені (приватний CA) для валідації клієнтських сертифікатів через
+            <see cref="F:System.Security.Cryptography.X509Certificates.X509ChainTrustMode.CustomRootTrust"/>. НІКОЛИ не машинне сховище.
+            </summary>
+            <remarks>
+            Заповнюється лише для mTLS. Порожня колекція + <see cref="P:WsRpcServer.Security.TlsServerOptions.ClientCertificateRequired"/> = true
+            означає, що жоден клієнтський сертифікат не пройде валідацію (fail-closed).
+            </remarks>
+        </member>
+        <member name="P:WsRpcServer.Security.TlsServerOptions.SpkiPins">
+            <summary>
+            Необов'язковий allowlist SPKI-SHA-256 пінів (defense-in-depth поверх довіри до CA).
+            </summary>
+            <remarks>
+            Кожен елемент — hex-рядок SHA-256 від <c>SubjectPublicKeyInfo</c> (див.
+            <see cref="P:WsRpcServer.Security.NodeIdentity.SpkiThumbprint"/>). Якщо непорожній, CA-валідний сертифікат,
+            чий SPKI не у списку, відхиляється. Пін переживає переоформлення сертифіката з тим самим
+            ключем (на відміну від піна за відбитком).
+            </remarks>
+        </member>
+        <member name="P:WsRpcServer.Security.TlsServerOptions.RevocationMode">
+            <summary>
+            Режим перевірки відкликання для клієнтських сертифікатів. За замовчуванням
+            <see cref="F:System.Security.Cryptography.X509Certificates.X509RevocationMode.Offline"/> (кешований CRL).
+            </summary>
+            <remarks>
+            <see cref="F:System.Security.Cryptography.X509Certificates.X509RevocationMode.Online"/> робить зовнішні OCSP/CRL/AIA-виклики під час
+            рукостискання — вектор DoS, якщо респондер повільний. Поєднуй <c>Offline</c> з короткоживучими
+            сертифікатами. <see cref="F:System.Security.Cryptography.X509Certificates.X509RevocationMode.NoCheck"/> допустимий лише зі свідомим
+            обґрунтуванням (guarded Roslyn-тестом).
+            </remarks>
+        </member>
+        <member name="T:WsRpcServer.Security.TlsServerOptionsValidator">
+             <summary>
+             Валідатор <see cref="T:WsRpcServer.Security.TlsServerOptions"/>, згенерований на етапі компіляції.
+             </summary>
+             <remarks>
+             Як і <see cref="T:WsRpcServer.Core.JsonRpcServerConfigValidator"/>: <see cref="T:Microsoft.Extensions.Options.OptionsValidatorAttribute"/> на
+             порожньому partial-класі генерує reflection-free <see cref="T:Microsoft.Extensions.Options.IValidateOptions`1"/> на основі
+             DataAnnotations (<c>[Required]</c> на <see cref="P:WsRpcServer.Security.TlsServerOptions.ServerCertificate"/>). AOT-сумісно.
+            
+             Крос-польові правила (приватний ключ серверного сертифіката, узгодженість mTLS-довіри) додаються
+             через <c>.Validate(...)</c> у композиційному корені <see cref="T:WsRpcServer.Extensions.SecureJsonRpcCoreExtensions"/>.
+             </remarks>
+        </member>
+        <member name="M:WsRpcServer.Security.TlsServerOptionsValidator.Validate(System.String,WsRpcServer.Security.TlsServerOptions)">
+            <summary>
+            Validates a specific named options instance (or all when <paramref name="name"/> is <see langword="null" />).
+            </summary>
+            <param name="name">The name of the options instance being validated.</param>
+            <param name="options">The options instance.</param>
+            <returns>Validation result.</returns>
         </member>
         <member name="T:WsRpcServer.Services.AbstractRpcServiceRegistry">
             <summary>
@@ -1205,6 +1899,15 @@
             
             Використання StreamJsonRpc.JsonRpc.AddLocalRpcTarget дозволяє зробити
             методи сервісів доступними для виклику через JSON-RPC протокол.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Services.AbstractRpcServiceRegistry.RegisterServices(StreamJsonRpc.JsonRpc,System.Guid,System.Security.Claims.ClaimsPrincipal)">
+            <inheritdoc />
+            <remarks>
+            Binder-шлях отримує <paramref name="principal"/> для примусу <c>[RpcAuthorize]</c> у голові
+            згенерованих делегатів. Рефлексійний шлях (<c>AddLocalRpcTarget</c>) не має per-method-перехоплення;
+            авторизацію там примушує <see cref="T:WsRpcServer.Authorization.AuthorizingJsonRpc"/> на рівні
+            <c>DispatchRequestAsync</c> (тож principal сюди передавати не потрібно).
             </remarks>
         </member>
         <member name="M:WsRpcServer.Services.AbstractRpcServiceRegistry.RegisterServicesViaReflection(StreamJsonRpc.JsonRpc,System.Guid)">
@@ -1399,19 +2102,23 @@
              IL2026/IL3050) генерований binder викликає <c>JsonRpc.AddLocalRpcMethod(name, delegate)</c> на кожен
              метод RPC-інтерфейсу, зв'язуючи делегат на етапі компіляції. Це робить ДИСПЕТЧ сумісним із Native AOT.
             
-             Якщо binder зареєстровано в DI, <see cref="M:WsRpcServer.Services.AbstractRpcServiceRegistry.RegisterServices(StreamJsonRpc.JsonRpc,System.Guid)"/> використовує
+             Якщо binder зареєстровано в DI, <see cref="M:WsRpcServer.Services.AbstractRpcServiceRegistry.RegisterServices(StreamJsonRpc.JsonRpc,System.Guid,System.Security.Claims.ClaimsPrincipal)"/> використовує
              його; інакше повертається до рефлексійного <c>AddLocalRpcTarget</c> (стара поведінка). Це окремий opt-in
              від <see cref="T:WsRpcServer.Services.IRpcServiceCatalog"/> (виявлення), бо delegate-шлях має інші компроміси, ніж
              <c>AddLocalRpcTarget</c> (експонує лише методи інтерфейсу; без подій таргета / RpcMarshalable / тощо).
              </remarks>
         </member>
-        <member name="M:WsRpcServer.Services.IRpcMethodBinder.Bind(StreamJsonRpc.JsonRpc,System.IServiceProvider,System.Guid)">
+        <member name="M:WsRpcServer.Services.IRpcMethodBinder.Bind(StreamJsonRpc.JsonRpc,System.IServiceProvider,System.Guid,System.Security.Claims.ClaimsPrincipal)">
             <summary>
             Реєструє всі RPC-методи виявлених сервісів у наданому екземплярі <paramref name="jsonRpc"/>.
             </summary>
             <param name="jsonRpc">Екземпляр JSON-RPC, у якому реєструються методи.</param>
             <param name="serviceProvider">Постачальник сервісів для резолву звичайних сервісів та залежностей.</param>
             <param name="clientId">Ідентифікатор клієнта (для клієнт-залежних сервісів).</param>
+            <param name="principal">
+            Principal сесії (з mTLS-ідентичності), проти якого примушуються <c>[RpcAuthorize]</c>-методи;
+            <c>null</c> для неавтентифікованого/плейн-текст шляху (позначені методи тоді deny-by-default).
+            </param>
         </member>
         <member name="T:WsRpcServer.Services.IRpcService">
             <summary>
@@ -1486,6 +2193,20 @@
             екземпляри для кожного клієнта, щоб вони могли зберігати стан клієнта.
             
             Внутрішньо використовує StreamJsonRpc.JsonRpc.AddLocalRpcTarget для реєстрації сервісів.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Services.IRpcServiceRegistry.RegisterServices(StreamJsonRpc.JsonRpc,System.Guid,System.Security.Claims.ClaimsPrincipal)">
+            <summary>
+            Реєструє сервіси у екземплярі JSON-RPC, передаючи principal сесії для примусу
+            <c>[RpcAuthorize]</c> на source-генерованому binder-шляху.
+            </summary>
+            <param name="jsonRpc">Екземпляр JSON-RPC.</param>
+            <param name="clientId">Ідентифікатор клієнта.</param>
+            <param name="principal">Principal сесії (з mTLS-ідентичності), або <c>null</c>.</param>
+            <remarks>
+            Default-реалізація інтерфейсу делегує на <see cref="M:WsRpcServer.Services.IRpcServiceRegistry.RegisterServices(StreamJsonRpc.JsonRpc,System.Guid)"/> (ігнорує
+            principal) — для зворотної сумісності зі споживачами, що реалізують лише дво-аргументний варіант.
+            <see cref="T:WsRpcServer.Services.AbstractRpcServiceRegistry"/> перевизначає її, щоб передати principal у binder.
             </remarks>
         </member>
         <member name="T:WsRpcServer.Services.RpcServiceDescriptor">
@@ -1604,6 +2325,16 @@
             <summary>
             Конфігурація JSON-RPC сервера.
             </summary>
+        </member>
+        <member name="P:WsRpcServer.Sessions.AbstractJsonRpcSession.Principal">
+            <summary>
+            Principal сесії, виведений з mTLS-ідентичності вузла (захищений транспорт).
+            </summary>
+            <remarks>
+            На плейн-текст транспорті лишається <c>null</c> (немає автентифікації). На захищеному
+            (<see cref="T:WsRpcServer.Core.AbstractSecureJsonRpcServer"/>) встановлюється у похідній сесії до
+            <c>RegisterServices</c>/<c>StartListening</c> і передається у примус <c>[RpcAuthorize]</c>.
+            </remarks>
         </member>
         <member name="P:WsRpcServer.Sessions.AbstractJsonRpcSession.JsonRpc">
             <summary>
@@ -1736,6 +2467,115 @@
             
             Важливо для похідних класів викликати базову реалізацію при перевизначенні.
             </remarks>
+        </member>
+        <member name="T:WsRpcServer.Sessions.AbstractSecureJsonRpcSession">
+            <summary>
+            Абстрактний базовий клас для ЗАХИЩЕНИХ (TLS / mTLS) сесій JSON-RPC WebSocket.
+            Дзеркалить <see cref="T:WsRpcServer.Sessions.AbstractJsonRpcSession"/>, але над <see cref="T:NetCoreServer.WssSession"/> (SSL-гілка
+            NetCoreServer), і додає <see cref="P:WsRpcServer.Sessions.AbstractSecureJsonRpcSession.Principal"/> з mTLS-ідентичності.
+            </summary>
+            <param name="server">Захищений сервер, до якого належить сесія.</param>
+            <param name="logger">Логер.</param>
+            <param name="config">Конфігурація сервера.</param>
+            <remarks>
+            NetCoreServer розводить плейн-текст (<c>WsSession</c>) і TLS (<c>WssSession</c>) в окремі ієрархії
+            без спільного WS-базового типу, тож інфраструктура сповіщень тут навмисно дублює
+            <see cref="T:WsRpcServer.Sessions.AbstractJsonRpcSession"/> (та сама семантика каналу/таймауту/відмови). Це транспортна
+            «glue»-ланка, яку фреймворк бере на себе, щоб споживач писав лише бізнес-логіку.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Sessions.AbstractSecureJsonRpcSession.#ctor(WsRpcServer.Core.AbstractSecureJsonRpcServer,Microsoft.Extensions.Logging.ILogger,WsRpcServer.Core.JsonRpcServerConfig)">
+            <summary>
+            Абстрактний базовий клас для ЗАХИЩЕНИХ (TLS / mTLS) сесій JSON-RPC WebSocket.
+            Дзеркалить <see cref="T:WsRpcServer.Sessions.AbstractJsonRpcSession"/>, але над <see cref="T:NetCoreServer.WssSession"/> (SSL-гілка
+            NetCoreServer), і додає <see cref="P:WsRpcServer.Sessions.AbstractSecureJsonRpcSession.Principal"/> з mTLS-ідентичності.
+            </summary>
+            <param name="server">Захищений сервер, до якого належить сесія.</param>
+            <param name="logger">Логер.</param>
+            <param name="config">Конфігурація сервера.</param>
+            <remarks>
+            NetCoreServer розводить плейн-текст (<c>WsSession</c>) і TLS (<c>WssSession</c>) в окремі ієрархії
+            без спільного WS-базового типу, тож інфраструктура сповіщень тут навмисно дублює
+            <see cref="T:WsRpcServer.Sessions.AbstractJsonRpcSession"/> (та сама семантика каналу/таймауту/відмови). Це транспортна
+            «glue»-ланка, яку фреймворк бере на себе, щоб споживач писав лише бізнес-логіку.
+            </remarks>
+        </member>
+        <member name="P:WsRpcServer.Sessions.AbstractSecureJsonRpcSession.SecureServer">
+            <summary>Захищений сервер, що володіє сесією.</summary>
+        </member>
+        <member name="P:WsRpcServer.Sessions.AbstractSecureJsonRpcSession.Logger">
+            <summary>Логер сесії.</summary>
+        </member>
+        <member name="P:WsRpcServer.Sessions.AbstractSecureJsonRpcSession.Cts">
+            <summary>Джерело токенів скасування для життєвого циклу сесії.</summary>
+        </member>
+        <member name="P:WsRpcServer.Sessions.AbstractSecureJsonRpcSession.NotificationChannel">
+            <summary>Канал черги сповіщень клієнту (DropOldest backpressure).</summary>
+        </member>
+        <member name="P:WsRpcServer.Sessions.AbstractSecureJsonRpcSession.Config">
+            <summary>Конфігурація сервера.</summary>
+        </member>
+        <member name="P:WsRpcServer.Sessions.AbstractSecureJsonRpcSession.JsonRpc">
+            <summary>Екземпляр JSON-RPC (ініціалізується у похідному класі після рукостискання).</summary>
+        </member>
+        <member name="P:WsRpcServer.Sessions.AbstractSecureJsonRpcSession.NotificationProcessingTask">
+            <summary>Завдання фонової обробки сповіщень.</summary>
+        </member>
+        <member name="P:WsRpcServer.Sessions.AbstractSecureJsonRpcSession.Principal">
+            <summary>
+            Principal сесії з валідованої mTLS-ідентичності. <c>null</c> до встановлення
+            (<see cref="M:WsRpcServer.Sessions.AbstractSecureJsonRpcSession.TryEstablishPrincipal"/>) або якщо ідентичність не виведено.
+            </summary>
+        </member>
+        <member name="M:WsRpcServer.Sessions.AbstractSecureJsonRpcSession.TryEstablishPrincipal">
+            <summary>
+            Резолвить валідовану <see cref="T:WsRpcServer.Security.NodeIdentity"/> для цього з'єднання й будує <see cref="P:WsRpcServer.Sessions.AbstractSecureJsonRpcSession.Principal"/>.
+            Викликати в <c>OnWsConnected</c> ДО <c>RegisterServices</c>/<c>StartListening</c>.
+            </summary>
+            <returns><c>true</c>, якщо ідентичність виведено й <see cref="P:WsRpcServer.Sessions.AbstractSecureJsonRpcSession.Principal"/> встановлено.</returns>
+        </member>
+        <member name="M:WsRpcServer.Sessions.AbstractSecureJsonRpcSession.SendNotificationAsync(System.String,System.Object[])">
+            <summary>
+            Ставить сповіщення в чергу на доставку клієнту (НЕ чекає на фактичну відправку).
+            </summary>
+            <param name="method">Ім'я методу сповіщення.</param>
+            <param name="args">Аргументи сповіщення.</param>
+            <returns>Уже завершене <see cref="T:System.Threading.Tasks.Task"/> — лише постановка в чергу.</returns>
+        </member>
+        <member name="M:WsRpcServer.Sessions.AbstractSecureJsonRpcSession.ProcessNotificationsAsync(System.Threading.CancellationToken)">
+            <summary>
+            Запускає фонову обробку черги сповіщень.
+            </summary>
+            <param name="cancellationToken">Токен скасування.</param>
+            <returns>Завдання обробки сповіщень.</returns>
+        </member>
+        <member name="M:WsRpcServer.Sessions.AbstractSecureJsonRpcSession.Close(System.Net.WebSockets.WebSocketCloseStatus,System.String)">
+            <summary>
+            Закриває WebSocket з'єднання з вказаним статусом та причиною.
+            </summary>
+            <param name="status">Статус закриття WebSocket.</param>
+            <param name="reason">Причина закриття.</param>
+        </member>
+        <member name="M:WsRpcServer.Sessions.AbstractSecureJsonRpcSession.SendBinaryDataAsync(System.ReadOnlyMemory{System.Byte})">
+            <summary>
+            Передає бінарні дані у вихідний буфер WebSocket (НЕ чекає на підтвердження відправки).
+            </summary>
+            <param name="data">Дані для надсилання.</param>
+            <returns>Уже завершене <see cref="T:System.Threading.Tasks.Task"/>.</returns>
+        </member>
+        <member name="M:WsRpcServer.Sessions.AbstractSecureJsonRpcSession.OnWsPing(System.Byte[],System.Int64,System.Int64)">
+            <summary>
+            Обробляє WebSocket ping (логує + надсилає pong через базову реалізацію).
+            </summary>
+            <param name="buffer">Буфер ping.</param>
+            <param name="offset">Зміщення.</param>
+            <param name="size">Розмір.</param>
+        </member>
+        <member name="M:WsRpcServer.Sessions.AbstractSecureJsonRpcSession.Dispose(System.Boolean)">
+            <summary>
+            Звільняє ресурси сесії: спершу скасування, далі дренаж фонової задачі, потім <c>Cts.Dispose</c> (H4).
+            </summary>
+            <param name="disposingManagedResources">Чи звільняти керовані ресурси.</param>
         </member>
         <member name="T:WsRpcServer.Sessions.IJsonRpcSession">
             <summary>

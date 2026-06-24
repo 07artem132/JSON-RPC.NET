@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using StreamJsonRpc;
 
 namespace WsRpcServer.Services;
@@ -12,7 +13,7 @@ namespace WsRpcServer.Services;
 /// IL2026/IL3050) генерований binder викликає <c>JsonRpc.AddLocalRpcMethod(name, delegate)</c> на кожен
 /// метод RPC-інтерфейсу, зв'язуючи делегат на етапі компіляції. Це робить ДИСПЕТЧ сумісним із Native AOT.
 ///
-/// Якщо binder зареєстровано в DI, <see cref="AbstractRpcServiceRegistry.RegisterServices"/> використовує
+/// Якщо binder зареєстровано в DI, <see cref="AbstractRpcServiceRegistry.RegisterServices(JsonRpc, Guid, System.Security.Claims.ClaimsPrincipal)"/> використовує
 /// його; інакше повертається до рефлексійного <c>AddLocalRpcTarget</c> (стара поведінка). Це окремий opt-in
 /// від <see cref="IRpcServiceCatalog"/> (виявлення), бо delegate-шлях має інші компроміси, ніж
 /// <c>AddLocalRpcTarget</c> (експонує лише методи інтерфейсу; без подій таргета / RpcMarshalable / тощо).
@@ -25,5 +26,9 @@ public interface IRpcMethodBinder
     /// <param name="jsonRpc">Екземпляр JSON-RPC, у якому реєструються методи.</param>
     /// <param name="serviceProvider">Постачальник сервісів для резолву звичайних сервісів та залежностей.</param>
     /// <param name="clientId">Ідентифікатор клієнта (для клієнт-залежних сервісів).</param>
-    void Bind(JsonRpc jsonRpc, IServiceProvider serviceProvider, Guid clientId);
+    /// <param name="principal">
+    /// Principal сесії (з mTLS-ідентичності), проти якого примушуються <c>[RpcAuthorize]</c>-методи;
+    /// <c>null</c> для неавтентифікованого/плейн-текст шляху (позначені методи тоді deny-by-default).
+    /// </param>
+    void Bind(JsonRpc jsonRpc, IServiceProvider serviceProvider, Guid clientId, ClaimsPrincipal? principal);
 }

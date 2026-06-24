@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
+using System.Security.Claims;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc;
@@ -110,7 +111,17 @@ public abstract class AbstractRpcServiceRegistry(
             "його через AddGeneratedRpcMethodBinder, тож ця гілка для них недосяжна.")]
     [UnconditionalSuppressMessage("AOT", "IL3050",
         Justification = "Див. IL2026 вище: рефлексійний AddLocalRpcTarget виконується лише без зареєстрованого binder'а.")]
-    public virtual void RegisterServices(JsonRpc jsonRpc, Guid clientId)
+    public virtual void RegisterServices(JsonRpc jsonRpc, Guid clientId) =>
+        RegisterServices(jsonRpc, clientId, principal: null);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Binder-шлях отримує <paramref name="principal"/> для примусу <c>[RpcAuthorize]</c> у голові
+    /// згенерованих делегатів. Рефлексійний шлях (<c>AddLocalRpcTarget</c>) не має per-method-перехоплення;
+    /// авторизацію там примушує <see cref="WsRpcServer.Authorization.AuthorizingJsonRpc"/> на рівні
+    /// <c>DispatchRequestAsync</c> (тож principal сюди передавати не потрібно).
+    /// </remarks>
+    public virtual void RegisterServices(JsonRpc jsonRpc, Guid clientId, ClaimsPrincipal? principal)
     {
         ArgumentNullException.ThrowIfNull(jsonRpc);
 
@@ -119,7 +130,7 @@ public abstract class AbstractRpcServiceRegistry(
         // AOT-шлях: якщо зареєстровано source-генерований binder — диспетч без рефлексії.
         if (ServiceProvider.GetService(typeof(IRpcMethodBinder)) is IRpcMethodBinder binder)
         {
-            binder.Bind(jsonRpc, ServiceProvider, clientId);
+            binder.Bind(jsonRpc, ServiceProvider, clientId, principal);
             AbstractRpcServiceRegistryLog.BinderUsed(Logger, clientId);
             return;
         }

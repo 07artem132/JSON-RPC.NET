@@ -19,6 +19,8 @@
 | [`api/subscriptions.md`](api/subscriptions.md) | `ISubscriptionManager<TEventType,TEventArgs>` + `AbstractSubscriptionManager<…>` (template-method + `OperationLock`) + `ISubscriptionStore<…>` / `AbstractSubscriptionStore<…>` |
 | [`api/events.md`](api/events.md) | `IEventProcessor` + `AbstractEventProcessor` (fan-out server→client, auto-unregister) + `RpcNotification` |
 | [`api/errors.md`](api/errors.md) | `RpcErrorException` + `JsonRpcErrorCode` (структуровані помилки) + bounded parse-recovery транспорту |
+| [`api/observability.md`](api/observability.md) | `WsRpcServerDiagnostics` (`Meter` + `ActivitySource` "WsRpcServer", метрики з'єднань/сповіщень/parse/auth + приватність-allowlist) + квота `JsonRpcServerConfig.MaxConcurrentConnections` |
+| [`api/security.md`](api/security.md) | TLS-транспорт (`AbstractSecureJsonRpcServer`, `TlsServerOptions`, `SecureTransport`), mTLS node-identity (`INodeCertificateValidator`/`CustomRootTrustValidator`, `NodeIdentity`, `INodeIdentityResolver`/`SpiffeNodeIdentityResolver`, `NodeIdentityPrincipalFactory`, `AbstractSecureJsonRpcSession`), RPC-авторизація (`RpcAuthorizeAttribute`, `IRpcAuthorizationPolicy`/`StaticRoleMapAuthorizationPolicy`, `RpcAuthorizationEnforcer`, `AuthorizingJsonRpc`, `RpcAuthorizationMetadata`) + `SecureJsonRpcCoreExtensions` |
 
 ## Приклади
 

@@ -1,4 +1,5 @@
-﻿using StreamJsonRpc;
+﻿using System.Security.Claims;
+using StreamJsonRpc;
 
 namespace WsRpcServer.Services;
 
@@ -39,4 +40,19 @@ public interface IRpcServiceRegistry
     /// Внутрішньо використовує StreamJsonRpc.JsonRpc.AddLocalRpcTarget для реєстрації сервісів.
     /// </remarks>
     void RegisterServices(JsonRpc jsonRpc, Guid clientId);
+
+    /// <summary>
+    /// Реєструє сервіси у екземплярі JSON-RPC, передаючи principal сесії для примусу
+    /// <c>[RpcAuthorize]</c> на source-генерованому binder-шляху.
+    /// </summary>
+    /// <param name="jsonRpc">Екземпляр JSON-RPC.</param>
+    /// <param name="clientId">Ідентифікатор клієнта.</param>
+    /// <param name="principal">Principal сесії (з mTLS-ідентичності), або <c>null</c>.</param>
+    /// <remarks>
+    /// Default-реалізація інтерфейсу делегує на <see cref="RegisterServices(JsonRpc, Guid)"/> (ігнорує
+    /// principal) — для зворотної сумісності зі споживачами, що реалізують лише дво-аргументний варіант.
+    /// <see cref="AbstractRpcServiceRegistry"/> перевизначає її, щоб передати principal у binder.
+    /// </remarks>
+    void RegisterServices(JsonRpc jsonRpc, Guid clientId, ClaimsPrincipal? principal) =>
+        RegisterServices(jsonRpc, clientId);
 }
