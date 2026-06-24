@@ -100,4 +100,16 @@ public record JsonRpcServerConfig
     /// </remarks>
     [Range(1, int.MaxValue)]
     public int MaxConsecutiveParseFailures { get; set; } = 10;
+
+    /// <summary>
+    /// Максимальна кількість одночасних з'єднань. <c>0</c> (за замовчуванням) = без ліміту.
+    /// </summary>
+    /// <remarks>
+    /// Квота захисту від вичерпання ресурсів (доповнює <see cref="MaxMessageSizeBytes"/> та
+    /// <see cref="MaxConsecutiveParseFailures"/>). Коли <c>&gt; 0</c> і кількість активних з'єднань
+    /// перевищує цей поріг, сервер відхиляє нове з'єднання (розриває його) ще до RPC-диспетчу.
+    /// <c>0</c> зберігає необмежену поведінку (additive).
+    /// </remarks>
+    [Range(0, int.MaxValue)]
+    public int MaxConcurrentConnections { get; set; }
 }

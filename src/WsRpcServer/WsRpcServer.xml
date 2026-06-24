@@ -187,6 +187,40 @@
             Логер для реєстрації подій сервера.
             </summary>
         </member>
+        <member name="F:WsRpcServer.Core.AbstractJsonRpcServer._maxConcurrentConnections">
+            <summary>
+            Ліниво-резолвлена квота одночасних з'єднань (<c>0</c> = без ліміту). Резолвиться з
+            <see cref="T:WsRpcServer.Core.JsonRpcServerConfig"/> у DI; <c>0</c>, якщо конфіг недоступний (сервер без DI).
+            </summary>
+        </member>
+        <member name="F:WsRpcServer.Core.AbstractJsonRpcServer._connections">
+            <summary>
+            Маркер «з'єднання зараховано» (для балансу гейджа) + span його життєвого циклу. Слабкі ключі —
+            запис зникає разом із сесією без витоку.
+            </summary>
+        </member>
+        <member name="T:WsRpcServer.Core.AbstractJsonRpcServer.ConnectionState">
+            <summary>Стан зарахованого з'єднання: span (або <c>null</c>, якщо немає слухачів activity).</summary>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractJsonRpcServer.OnConnected(NetCoreServer.TcpSession)">
+            <summary>
+            Обробляє нове TCP-з'єднання: enforce квоти <see cref="P:WsRpcServer.Core.JsonRpcServerConfig.MaxConcurrentConnections"/>
+            + облік активних з'єднань (метрика + span). Викликається NetCoreServer на рівні сервера.
+            </summary>
+            <param name="session">Нова сесія.</param>
+            <remarks>
+            Це серверний seam (не споживацький <c>OnWsConnected</c> сесії), тож інструментація/квота не
+            конфліктують із бізнес-логікою похідної сесії. Відхилене за квотою з'єднання НЕ зараховується в
+            гейдж і не доходить до RPC-диспетчу.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Core.AbstractJsonRpcServer.OnDisconnected(NetCoreServer.TcpSession)">
+            <summary>
+            Обробляє розрив TCP-з'єднання: знімає облік активних з'єднань + завершує span (лише для
+            зарахованих з'єднань — відхилені за квотою ігноруються).
+            </summary>
+            <param name="session">Сесія, що від'єдналася.</param>
+        </member>
         <member name="M:WsRpcServer.Core.AbstractJsonRpcServer.CreateSession">
             <summary>
             Створює нову WebSocket сесію для підключеного клієнта.
@@ -805,6 +839,17 @@
             кожного успішного розбору повідомлення.
             </remarks>
         </member>
+        <member name="P:WsRpcServer.Core.JsonRpcServerConfig.MaxConcurrentConnections">
+            <summary>
+            Максимальна кількість одночасних з'єднань. <c>0</c> (за замовчуванням) = без ліміту.
+            </summary>
+            <remarks>
+            Квота захисту від вичерпання ресурсів (доповнює <see cref="P:WsRpcServer.Core.JsonRpcServerConfig.MaxMessageSizeBytes"/> та
+            <see cref="P:WsRpcServer.Core.JsonRpcServerConfig.MaxConsecutiveParseFailures"/>). Коли <c>&gt; 0</c> і кількість активних з'єднань
+            перевищує цей поріг, сервер відхиляє нове з'єднання (розриває його) ще до RPC-диспетчу.
+            <c>0</c> зберігає необмежену поведінку (additive).
+            </remarks>
+        </member>
         <member name="T:WsRpcServer.Core.JsonRpcServerConfigValidator">
              <summary>
              Валідатор конфігурації <see cref="T:WsRpcServer.Core.JsonRpcServerConfig"/>, згенерований під час компіляції.
@@ -830,6 +875,53 @@
             <param name="name">The name of the options instance being validated.</param>
             <param name="options">The options instance.</param>
             <returns>Validation result.</returns>
+        </member>
+        <member name="T:WsRpcServer.Diagnostics.WsRpcServerDiagnostics">
+             <summary>
+             Спільні джерела телеметрії бібліотеки: <see cref="T:System.Diagnostics.Metrics.Meter"/> та
+             <see cref="T:System.Diagnostics.ActivitySource"/> з ім'ям <c>"WsRpcServer"</c>.
+             </summary>
+             <remarks>
+             Приватність — інваріант (дзеркало SignalCli.NET): теги вимірів походять ЛИШЕ з фіксованого безпечного
+             набору <see cref="P:WsRpcServer.Diagnostics.WsRpcServerDiagnostics.AllowedTagKeys"/> (статуси/енум-літерали), НІКОЛИ не несуть тіл повідомлень, номерів,
+             чи секретів ідентичності. Інструментація інертна без підписників (pull/opt-in), тож не впливає на
+             поведінку чи продуктивність, якщо ніхто не слухає.
+            
+             Імена інструментів — крапко-розділені (<c>wsrpc.*</c>), як радить OpenTelemetry-конвенція.
+             </remarks>
+        </member>
+        <member name="F:WsRpcServer.Diagnostics.WsRpcServerDiagnostics.SourceName">
+            <summary>Ім'я <see cref="T:System.Diagnostics.Metrics.Meter"/> та <see cref="T:System.Diagnostics.ActivitySource"/>.</summary>
+        </member>
+        <member name="F:WsRpcServer.Diagnostics.WsRpcServerDiagnostics.ResultTagKey">
+            <summary>Ключ тегу для результату операції (єдиний дозволений тег-ключ).</summary>
+        </member>
+        <member name="P:WsRpcServer.Diagnostics.WsRpcServerDiagnostics.AllowedTagKeys">
+            <summary>Фіксований allowlist тег-ключів — privacy-guard звіряє захоплені виміри з ним.</summary>
+        </member>
+        <member name="P:WsRpcServer.Diagnostics.WsRpcServerDiagnostics.ActivitySource">
+            <summary>Джерело activity-span'ів (життєвий цикл з'єднання).</summary>
+        </member>
+        <member name="M:WsRpcServer.Diagnostics.WsRpcServerDiagnostics.ConnectionOpened">
+            <summary>Збільшує гейдж активних з'єднань (з'єднання зараховано).</summary>
+        </member>
+        <member name="M:WsRpcServer.Diagnostics.WsRpcServerDiagnostics.ConnectionClosed">
+            <summary>Зменшує гейдж активних з'єднань (зараховане з'єднання розірвано).</summary>
+        </member>
+        <member name="M:WsRpcServer.Diagnostics.WsRpcServerDiagnostics.ConnectionRejected">
+            <summary>Лічить відхилене за квотою з'єднання.</summary>
+        </member>
+        <member name="M:WsRpcServer.Diagnostics.WsRpcServerDiagnostics.Notification(System.Boolean)">
+            <summary>Лічить сповіщення з тегом <c>result</c> (<c>queued</c>/<c>dropped</c>).</summary>
+        </member>
+        <member name="M:WsRpcServer.Diagnostics.WsRpcServerDiagnostics.ParseFailure">
+            <summary>Лічить невдалий розбір JSON.</summary>
+        </member>
+        <member name="M:WsRpcServer.Diagnostics.WsRpcServerDiagnostics.AuthorizationDenied">
+            <summary>Лічить відмову авторизації.</summary>
+        </member>
+        <member name="M:WsRpcServer.Diagnostics.WsRpcServerDiagnostics.StartConnectionActivity">
+            <summary>Стартує span життєвого циклу з'єднання (або <c>null</c>, якщо немає слухачів).</summary>
         </member>
         <member name="T:WsRpcServer.Events.AbstractEventProcessor">
              <summary>

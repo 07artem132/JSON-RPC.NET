@@ -128,6 +128,34 @@ business logic. Every pattern below exists to keep that extension seam safe and 
   Logging EventId blocks **1500–1549** (secure server), **1550–1599** (mTLS validator/identity), **1600–1699**
   (authorization). Full reference: [`docs/api/security.md`](../../docs/api/security.md).
 
+## Observability + connection quota (`observability-and-resilience`, 2.7.0)
+
+- ✅ Shipped. `WsRpcServerDiagnostics` (`src/WsRpcServer/Diagnostics/`) owns a static `Meter` +
+  `ActivitySource` named `"WsRpcServer"`. Instruments: `wsrpc.connections.active` (UpDownCounter),
+  `wsrpc.connections.rejected`, `wsrpc.notifications{result=queued|dropped}`, `wsrpc.parse_failures`,
+  `wsrpc.authorization.denied`; a per-connection span. **Add a metric via a helper on `WsRpcServerDiagnostics`,
+  not an inline `Meter.Create*` at the call site** — keeps the privacy allowlist enforceable in one place.
+- **Privacy is an invariant** (mirror SignalCli.NET rule #1): measurement tag keys MUST stay within
+  `WsRpcServerDiagnostics.AllowedTagKeys` (`{ "result" }`) — only enum-like literals / statuses / counts,
+  never message bodies, phones, or identity secrets. `WsRpcServerDiagnosticsTests` pins this with a
+  `MeterListener` that asserts every captured tag key is in the allowlist; a new tag key without updating
+  the allowlist + test fails loudly. Instrumentation is **inert without listeners** (no behavior/perf impact).
+- **Instrument at framework-owned seams only** (not consumer-owned overrides): server
+  `OnConnected`/`OnDisconnected` (`TcpServer` virtuals — the consumer overrides session-level `OnWsConnected`,
+  so these don't collide), session `SendNotificationAsync`, transport parse-recovery loop, and
+  `RpcAuthorizationEnforcer`. The active-connection gauge balances inc/dec via a
+  `ConditionalWeakTable<TcpSession, …>` marker so only **accepted** connections count (rejected ones don't).
+- **Connection quota.** `JsonRpcServerConfig.MaxConcurrentConnections` (`[Range(0,…)]`, default `0` = unlimited)
+  is enforced in `AbstractJsonRpcServer.OnConnected`: when `> 0` and `ConnectedSessions` exceeds it →
+  Warning (EventId **1001**, server block) + `connections.rejected` + `session.Disconnect()` before RPC
+  dispatch. Resolved lazily from DI (`Lazy<int>` over `ServiceProvider`); `0` if no config (server without DI).
+  Guarded by a real loopback `ConnectionQuotaTests` (two `ClientWebSocket`s, polled — no fixed sleeps).
+- **Deferred (documented in the proposal, not gaps):** idle-timeout needs a consumer-cooperative API
+  (`OnWsReceived` is consumer-owned and often doesn't call `base`); graceful drain needs an accept-gate
+  (NetCoreServer `Stop()` is synchronous and tears down everything); per-`NodeIdentity` limits build on this
+  quota + the authz layer; a separate `JSON-RPC.NET.HealthChecks` package is a later iteration. Full
+  reference: [`docs/api/observability.md`](../../docs/api/observability.md).
+
 ## Transport / parse-recovery (audit finding H2)
 
 - `WebSocketMessageHandler : Stream` adapts WS frames into the byte stream StreamJsonRpc reads. The

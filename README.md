@@ -462,7 +462,9 @@ throw new RpcErrorException(
 - ✅ **Авторизація та аутентифікація** — реалізовано у **2.6.0** (`secure-transport-mtls`): захищений TLS/mTLS
   транспорт (`AbstractSecureJsonRpcServer`), node-identity з клієнтського сертифіката (SAN URI/SPIFFE + SPKI),
   та `[RpcAuthorize]` deny-by-default. Деталі — [`docs/api/security.md`](docs/api/security.md).
-- **Аналітика та моніторинг** - Розширені можливості для спостереження та аналізу продуктивності
+- ✅ **Аналітика та моніторинг** — реалізовано у **2.7.0** (`observability-and-resilience`): `Meter` +
+  `ActivitySource` "WsRpcServer" (метрики з'єднань/сповіщень/parse/auth, приватність-allowlist) та квота
+  одночасних з'єднань `MaxConcurrentConnections`. Деталі — [`docs/api/observability.md`](docs/api/observability.md).
 
 ## 📜 Ліцензія
 

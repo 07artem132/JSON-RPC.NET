@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.Extensions.Logging;
 using StreamJsonRpc.Protocol;
+using WsRpcServer.Diagnostics;
 using WsRpcServer.Exceptions;
 using WsRpcServer.Logging;
 
@@ -45,6 +46,8 @@ public static class RpcAuthorizationEnforcer
         {
             return;
         }
+
+        WsRpcServerDiagnostics.AuthorizationDenied();
 
         if (logger is not null)
         {

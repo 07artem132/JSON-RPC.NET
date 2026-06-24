@@ -20,9 +20,10 @@ It is a **framework of abstract base classes** — consumers subclass `AbstractJ
 `[IRpcService]` discovery. The primary downstream consumer is **SignalCliNet.WsRpcServer**.
 
 - Target framework: **net10.0**. Package version lives in `Directory.Build.props`
-  (`<WsRpcServerPackageVersion>`, currently **2.6.0**) — never hardcode `<Version>` in a csproj.
+  (`<WsRpcServerPackageVersion>`, currently **2.7.0**) — never hardcode `<Version>` in a csproj.
 - Five layers: Transport (WebSocket) → Protocol (JSON-RPC 2.0) → Session → Service → Subscription.
   Optional **secure** transport (TLS/mTLS) + RPC authorization layer over them (`secure-transport-mtls`, 2.6.0).
+  Optional **observability** (`Meter`/`ActivitySource` "WsRpcServer") + concurrent-connection quota (`observability-and-resilience`, 2.7.0).
 
 ## Build & test
 
@@ -159,7 +160,7 @@ Path-scoped agent instructions live in `.claude/rules/` (load conditionally when
 This repo is mid-maturation. The current floor, established by `foundation-cluster-1` (→ 1.1.0):
 
 - **Build hygiene:** 0 warnings, `TreatWarningsAsErrors=true` on lib + tests; shared `Directory.Build.props`.
-- **Tests:** unit suite green (**158**). Adding a feature that touches an open audit finding SHOULD add the matching regression-guard test (see `.claude/rules/audit-debt.md`).
+- **Tests:** unit suite green (**164**). Adding a feature that touches an open audit finding SHOULD add the matching regression-guard test (see `.claude/rules/audit-debt.md`).
 - **Process:** non-trivial work goes through OpenSpec (`openspec/changes/<name>/`); `AUDIT-FINDINGS.md` is the prioritized backlog (4 HIGH / 9 MEDIUM / 7 LOW — **all now shipped/resolved**).
 
 ## Implemented / planned
@@ -192,6 +193,20 @@ This repo is mid-maturation. The current floor, established by `foundation-clust
   Roslyn guard (no `=> true` / unjustified `NoCheck`). Does **not** flip `IsAotCompatible` (rule #4 upstream blocker
   stands). **Downstream follow-up (separate change):** `SignalCliNet.WsRpcServer` wires cert + private CA + SPKI +
   node→roles via `AddSignalJsonRpc`. See `openspec/changes/secure-transport-mtls/`.
+- `observability-and-resilience` (**2.7.0**) — closes the README-roadmap "Аналітика та моніторинг" item +
+  adds a connection quota. 2 capabilities. **`observability`**: `WsRpcServerDiagnostics` exposes a `Meter`
+  + `ActivitySource` named `"WsRpcServer"` (instruments `wsrpc.connections.active`/`.rejected`,
+  `wsrpc.notifications{result}`, `wsrpc.parse_failures`, `wsrpc.authorization.denied`; per-connection span)
+  instrumented at 4 framework-owned seams (server `OnConnected`/`OnDisconnected`, session
+  `SendNotificationAsync`, transport parse-recovery, `RpcAuthorizationEnforcer`). **Privacy is an invariant**
+  (mirror SignalCli.NET): tag keys ⊆ `AllowedTagKeys` (`{ "result" }`), never message/identity payloads —
+  pinned by `WsRpcServerDiagnosticsTests` (`MeterListener`). Inert without listeners. **`connection-resilience`**:
+  `JsonRpcServerConfig.MaxConcurrentConnections` (`[Range(0,…)]`, default `0` = unlimited) enforced in
+  `AbstractJsonRpcServer.OnConnected` (TCP-accept seam) — over-limit → Warning (EventId 1001) +
+  `connections.rejected` + `Disconnect`, before RPC dispatch; guarded by a real loopback `ConnectionQuotaTests`.
+  No new NuGet dep. Suite 158 → 164. **Deferred (separate changes):** idle-timeout (consumer-owned
+  `OnWsReceived` seam), graceful drain (NetCoreServer `Stop()` is synchronous), per-`NodeIdentity` limits,
+  a separate `JSON-RPC.NET.HealthChecks` package. See `openspec/changes/observability-and-resilience/`.
 - **Backlog** (from `AUDIT-FINDINGS.md`): **empty** — all 20 findings shipped/resolved, plus the AOT track (`registry-sourcegen-discovery` → `aot-readiness` → `aot-rpc-dispatch`) is complete for the part we own (discovery + dispatch). The remaining AOT limit is **upstream**: StreamJsonRpc 2.25.29's formatter/envelope serialization isn't AOT-clean (IL3053), so `<IsAotCompatible>true</IsAotCompatible>` stays off until StreamJsonRpc ships an AOT-safe formatter. The StreamJsonRpc-replacement question was researched (spike) and rejected.
 
 ## Git

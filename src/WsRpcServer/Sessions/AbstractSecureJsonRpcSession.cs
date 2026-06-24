@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using NetCoreServer;
 using StreamJsonRpc;
 using WsRpcServer.Core;
+using WsRpcServer.Diagnostics;
 using WsRpcServer.Events;
 using WsRpcServer.Logging;
 using WsRpcServer.Security;
@@ -98,10 +99,12 @@ public abstract class AbstractSecureJsonRpcSession(
         if (!NotificationChannel.Writer.TryWrite(new RpcNotification(method, args)))
         {
             AbstractJsonRpcSessionLog.NotificationChannelFull(Logger, method, Id);
+            WsRpcServerDiagnostics.Notification(dropped: true);
         }
         else
         {
             AbstractJsonRpcSessionLog.NotificationQueued(Logger, method, Id);
+            WsRpcServerDiagnostics.Notification(dropped: false);
         }
 
         return Task.CompletedTask;
