@@ -30,8 +30,18 @@ jobs:
 
       # Версія пакета береться з Directory.Build.props
       # ($(WsRpcServerPackageVersion) -> JSON-RPC.NET).
+      # Збираємо усе рішення (а не лише WsRpcServer.csproj), щоб зібрати й тестовий
+      # проєкт — це покриває й src/WsRpcServer/WsRpcServer.csproj для наступного
+      # --no-build пакування.
+      - name: Restore
+        run: dotnet restore JSON-RPC.NET.sln
+
       - name: Build (Release)
-        run: dotnet build src/WsRpcServer/WsRpcServer.csproj -c Release
+        run: dotnet build JSON-RPC.NET.sln -c Release --no-restore
+
+      # Release-quality gate: жоден пакет не публікується, доки не пройде тестовий набір.
+      - name: Test
+        run: dotnet test tests/WsRpcServer.Tests/WsRpcServer.Tests.csproj -c Release --no-build
 
       - name: Pack JSON-RPC.NET
         run: dotnet pack src/WsRpcServer/WsRpcServer.csproj -c Release --no-build -o "${{ github.workspace }}/nupkgs"

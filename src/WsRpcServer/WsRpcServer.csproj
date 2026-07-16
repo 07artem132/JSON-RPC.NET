@@ -18,9 +18,16 @@
         <RepositoryUrl>https://github.com/07artem132/JSON-RPC.NET</RepositoryUrl>
         <IncludeContentFiles>true</IncludeContentFiles>
         <Description>WsRpcServer — це фреймворк для розробки кросплатформенних 🔥 blazing-fast JSON-RPC сервісів. Заснований на NetCoreServer для транспортного рівня та StreamJsonRpc для роботи з протоколом JSON-RPC.</Description>
+        <!-- Пакуємо README у NuGet — той самий патерн, що й SignalCli.NET
+             (src/SignalCli/SignalCli.csproj): PackageReadmeFile + None Include нижче. -->
+        <PackageReadmeFile>README.md</PackageReadmeFile>
         <IncludeSymbols>true</IncludeSymbols>
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     </PropertyGroup>
+
+    <ItemGroup>
+      <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    </ItemGroup>
 
     <ItemGroup>
       <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.9" />
