@@ -112,4 +112,16 @@ public record JsonRpcServerConfig
     /// </remarks>
     [Range(0, int.MaxValue)]
     public int MaxConcurrentConnections { get; set; }
+
+    /// <summary>
+    /// Коли <c>true</c> — вихідні JSON-RPC кадри надсилаються ТЕКСТОВИМ WebSocket-кадром замість бінарного.
+    /// За замовчуванням <c>false</c> (бінарна поведінка, зворотна сумісність).
+    /// </summary>
+    /// <remarks>
+    /// WHATWG-браузерний клієнт для JSON очікує текстовий кадр (<c>event.data</c> = <c>string</c>, а не
+    /// <c>Blob</c>). Увімкнення цього прапорця забезпечує browser-interop; дефолт лишає бінарні кадри для
+    /// сумісності з наявними (не-браузерними) споживачами. Прапорець булевий — <c>[Range]</c>-валідація
+    /// не потрібна.
+    /// </remarks>
+    public bool UseTextFramesForOutgoingMessages { get; set; }
 }

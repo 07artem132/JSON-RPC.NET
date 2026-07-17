@@ -182,6 +182,33 @@ business logic. Every pattern below exists to keep that extension seam safe and 
   handler. `WsSessionOnWsPingGuardTests` pins both halves (base virtual + we genuinely override) — a
   NetCoreServer bump that flips virtuality trips either the build (`override` won't compile) or the test.
 
+## Browser (WHATWG) WebSocket interop (`browser-ws-interop`, 2.8.0)
+
+- ✅ Shipped. Two **additive / opt-in** seams (default = current wire behavior — the single consumer must
+  not silently change framing). Both live in the sessions because the framework owns transport, and both are
+  **duplicated across the plaintext + secure hierarchies** (rule #11 — no shared WS base type); the pure,
+  transport-agnostic logic (parse offered subprotocols + rebuild the 101) is factored into internal
+  `Sessions/WsUpgradeInterop.cs` so only the thin `OnWsConnecting` override is duplicated.
+- **Subprotocol echo.** `protected virtual string? NegotiateSubprotocol(IReadOnlyList<string> offered)`
+  (default `null`) is the consumer hook. The base `override bool OnWsConnecting(HttpRequest, HttpResponse)`
+  parses `Sec-WebSocket-Protocol` (multiple headers OR comma-list), calls the hook, and — when it returns
+  non-null — **fully rebuilds** the 101 response (`Clear` → `SetBegin(101)` → `Connection`/`Upgrade`/
+  `Sec-WebSocket-Accept` = `Base64(SHA1(key+GUID))` + `Sec-WebSocket-Protocol` → `SetBody`). This encapsulates
+  the workaround for **NetCoreServer 8.0.7**, where `PerformServerUpgrade` calls `OnWsConnecting` **after**
+  `response.SetBody()` (verified from upstream: the `OnWsConnecting`-before-`SetBody` fix is master commit
+  `2c1cdc47`, post-8.0.7) — so a naive `response.SetHeader(...)` in an override appends **after** the
+  body-separator and leaks into the WS stream as a garbage frame (WHATWG client sees "reserved bits set",
+  never reaches open). A null hook returns `base.OnWsConnecting(...)` — behavior unchanged. The SHA-1 is
+  RFC 6455 handshake glue, not security crypto (narrow `CA5350` suppression with a `justification:` comment).
+- **Text frames.** `JsonRpcServerConfig.UseTextFramesForOutgoingMessages` (bool, default `false` = Binary,
+  no `[Range]`). When `true`, `WebSocketMessageHandler.WriteCoreAsync` sends via `IJsonRpcSession.SendTextDataAsync`
+  (both base sessions, over NetCoreServer `SendTextAsync`) instead of `SendBinaryDataAsync` — WHATWG browsers
+  expect a Text frame for JSON (`event.data` is a `string`, not a `Blob`). `SendTextDataAsync` mirrors
+  `SendBinaryDataAsync` exactly (dispose-guard + log). New session-block EventIds 1117–1120.
+- **Guards:** real loopback `SubprotocolNegotiationTests` (`ClientWebSocket` offers a subprotocol → server
+  echoes exactly it, reaches open, first post-upgrade frame is valid) + default-hook-unchanged; `OutgoingFrameTypeTests`
+  (loopback Text/Binary per flag through the real `WriteCoreAsync`, plus a deterministic handler-level routing test).
+
 ## Logging (source-generated)
 
 - ✅ Shipped in `logger-message-migration` (2.1.0). All `ILogger` logging in `src/WsRpcServer` goes

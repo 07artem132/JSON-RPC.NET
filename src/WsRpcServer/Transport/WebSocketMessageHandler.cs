@@ -39,6 +39,13 @@ public sealed class WebSocketMessageHandler : MessageHandlerBase, IJsonRpcMessag
     /// </summary>
     private readonly int _maxConsecutiveParseFailures;
 
+    /// <summary>
+    /// Коли <c>true</c> — вихідні JSON-RPC повідомлення надсилаються текстовим кадром (WHATWG browser
+    /// interop), інакше — бінарним (дефолт, зворотна сумісність). Читається з
+    /// <see cref="JsonRpcServerConfig.UseTextFramesForOutgoingMessages"/>.
+    /// </summary>
+    private readonly bool _useTextFrames;
+
     public WebSocketMessageHandler(
         IJsonRpcSession session,
         IJsonRpcMessageFormatter formatter,
@@ -49,6 +56,7 @@ public sealed class WebSocketMessageHandler : MessageHandlerBase, IJsonRpcMessag
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _maxConsecutiveParseFailures = config?.MaxConsecutiveParseFailures ?? 10;
+        _useTextFrames = config?.UseTextFramesForOutgoingMessages ?? false;
 
         // Налаштовуємо канал з пороговим значенням
         var receivePipe = new Pipe(new PipeOptions(
@@ -280,8 +288,16 @@ public sealed class WebSocketMessageHandler : MessageHandlerBase, IJsonRpcMessag
                 tracer.OnSerializationComplete(content, sequence);
             }
 
-            // Використовуємо NetCoreServer для надсилання бінарних даних
-            await _session.SendBinaryDataAsync(writer.WrittenMemory).ConfigureAwait(false);
+            // Browser-interop: за прапорцем шлемо JSON-RPC кадр текстом (WHATWG-клієнт очікує string),
+            // інакше — бінарним кадром (дефолт, зворотна сумісність).
+            if (_useTextFrames)
+            {
+                await _session.SendTextDataAsync(writer.WrittenMemory).ConfigureAwait(false);
+            }
+            else
+            {
+                await _session.SendBinaryDataAsync(writer.WrittenMemory).ConfigureAwait(false);
+            }
 
             WebSocketMessageHandlerLog.MessageSent(_logger, writer.WrittenCount, _session.Id);
         }

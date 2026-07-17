@@ -213,6 +213,77 @@ public abstract class AbstractSecureJsonRpcSession(
     }
 
     /// <summary>
+    /// Передає дані у вихідний буфер WebSocket ТЕКСТОВИМ кадром (симетрично <see cref="SendBinaryDataAsync"/>).
+    /// </summary>
+    /// <param name="data">Дані (UTF-8 текст) для надсилання.</param>
+    /// <returns>Уже завершене <see cref="Task"/> — <c>SendTextAsync</c> NetCoreServer синхронний.</returns>
+    /// <remarks>
+    /// Використовується транспортом, коли ввімкнено
+    /// <see cref="JsonRpcServerConfig.UseTextFramesForOutgoingMessages"/> (WHATWG browser interop:
+    /// <c>event.data</c> для JSON — рядок, а не <c>Blob</c>). Дефолт лишає бінарні кадри
+    /// (<see cref="SendBinaryDataAsync"/>).
+    /// </remarks>
+    public virtual Task SendTextDataAsync(ReadOnlyMemory<byte> data)
+    {
+        if (IsDisposed)
+        {
+            AbstractJsonRpcSessionLog.TextSendAfterDispose(Logger, Id);
+            return Task.CompletedTask;
+        }
+
+        try
+        {
+            AbstractJsonRpcSessionLog.SendingTextData(Logger, data.Length, Id);
+            SendTextAsync(data.Span);
+        }
+        catch (Exception ex)
+        {
+            AbstractJsonRpcSessionLog.TextSendError(Logger, ex, data.Length, Id);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Хук узгодження WebSocket-субпротоколу під час 101-upgrade (browser-interop, opt-in).
+    /// </summary>
+    /// <param name="offeredSubprotocols">Субпротоколи, запропоновані клієнтом у <c>Sec-WebSocket-Protocol</c>
+    /// (кілька заголовків АБО comma-list; може бути порожнім).</param>
+    /// <returns>Субпротокол для echo, або <c>null</c> (за замовчуванням) — тоді відповідь незмінна.</returns>
+    /// <remarks>
+    /// Дзеркалить <see cref="AbstractJsonRpcSession.NegotiateSubprotocol"/> для захищеної (wss) гілки:
+    /// WHATWG-браузерний клієнт вимагає echo узгодженого субпротоколу у 101-відповіді. Базова реалізація
+    /// повертає <c>null</c> (поведінка незмінна без override).
+    /// </remarks>
+    protected virtual string? NegotiateSubprotocol(IReadOnlyList<string> offeredSubprotocols) => null;
+
+    /// <summary>
+    /// Перехоплює 101-upgrade, щоб за потреби echo-нути узгоджений субпротокол (browser-interop).
+    /// </summary>
+    /// <param name="request">HTTP-запит рукостискання.</param>
+    /// <param name="response">HTTP-відповідь 101 Switching Protocols.</param>
+    /// <returns><c>true</c>, якщо рукостискання дозволено.</returns>
+    /// <remarks>
+    /// Якщо <see cref="NegotiateSubprotocol"/> дав не-<c>null</c> — база повністю перебудовує 101-відповідь
+    /// із <c>Sec-WebSocket-Protocol</c> за RFC 6455 (інкапсулює обхід дефекту NetCoreServer 8.0.7, де
+    /// <c>OnWsConnecting</c> викликається ПІСЛЯ <c>SetBody()</c>); інакше — <c>base.OnWsConnecting(...)</c>.
+    /// </remarks>
+    public override bool OnWsConnecting(HttpRequest request, HttpResponse response)
+    {
+        var offered = WsUpgradeInterop.ParseOfferedSubprotocols(request);
+        var negotiated = NegotiateSubprotocol(offered);
+
+        if (!string.IsNullOrEmpty(negotiated) &&
+            WsUpgradeInterop.TryWriteUpgradeResponse(request, response, negotiated))
+        {
+            AbstractJsonRpcSessionLog.SubprotocolNegotiated(Logger, negotiated, Id);
+            return true;
+        }
+
+        return base.OnWsConnecting(request, response);
+    }
+
+    /// <summary>
     /// Обробляє WebSocket ping (логує + надсилає pong через базову реалізацію).
     /// </summary>
     /// <param name="buffer">Буфер ping.</param>
