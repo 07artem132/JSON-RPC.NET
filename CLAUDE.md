@@ -222,6 +222,41 @@ This repo is mid-maturation. The current floor, established by `foundation-clust
   `openspec/changes/browser-ws-interop/`.
 - **Backlog** (from `AUDIT-FINDINGS.md`): **empty** — all 20 findings shipped/resolved, plus the AOT track (`registry-sourcegen-discovery` → `aot-readiness` → `aot-rpc-dispatch`) is complete for the part we own (discovery + dispatch). The remaining AOT limit is **upstream**: StreamJsonRpc 2.25.29's formatter/envelope serialization isn't AOT-clean (IL3053), so `<IsAotCompatible>true</IsAotCompatible>` stays off until StreamJsonRpc ships an AOT-safe formatter. The StreamJsonRpc-replacement question was researched (spike) and rejected.
 
+## Known upstream limitations
+
+Diagnosed, deliberately **not fixed** — the root cause is outside our code and any workaround would be
+risky or ineffective. Do not "fix" these by hacking the transport; they are documented won't-do's.
+
+- **WS control frames (ping) are serialized behind the single per-connection receive pump — NetCoreServer
+  8.0.7, not us.** NetCoreServer runs the *entire* inbound path on one sequential receive pump per
+  connection: `TcpSession.OnAsyncCompleted` → `ProcessReceive` (calls `OnReceived`, then re-arms the next
+  socket read only *after* it returns) → `TryReceive` (decompiled `TcpSession.cs`, `OnAsyncCompleted`
+  ≈L520-543 / `ProcessReceive` ≈L548-586 / `TryReceive` ≈L428-451). `WsSession.OnReceived` forwards to
+  `WebSocket.PrepareReceiveFrame` (`WsSession.cs` ≈L435-445), which parses frames in a `while (size > 0)`
+  loop under `lock (WsReceiveLock)` and dispatches each opcode **inline** — ping(9)→`OnWsPing`,
+  data(1/2)→`OnWsReceived` (`WebSocket.cs` ≈L357-530, dispatch switch ≈L503-527). The auto-pong is produced
+  **inline on that pump thread**: `WsSession.OnWsPing` → `SendPongAsync` (`WsSession.cs` ≈L515-518). So a
+  client ping is answered only once the pump reaches the ping frame — there is **no separate control-frame
+  thread**. (Verified against the installed 8.0.7 DLL via `ilspycmd`; there is no matching `8.0.7` git tag —
+  it's a NuGet-only build past the `8.0.4` tag.)
+- **Why it is nevertheless NOT our transport holding the pump.** Our inbound path is already decoupled: the
+  session's `OnWsReceived` is fire-and-forget into a `System.IO.Pipelines.Pipe`
+  (`WebSocketMessageHandler.ProcessReceivedDataAsync` just `_writer.Write(span)` + discards `FlushAsync()`,
+  `WebSocketMessageHandler.cs:81-108`) and returns immediately; StreamJsonRpc reads + dispatches the RPC on a
+  **decoupled thread-pool loop** (the `Pipe`'s default `ReaderScheduler` is `PipeScheduler.ThreadPool`), never
+  on the pump thread. So a long-*processing* (properly async) in-flight RPC does **not** hold the pump, and a
+  ping arriving during it *is* parsed and *is* ponged. The only genuine pump-occupancy is a single very large
+  **inbound** frame (accumulated across many `OnReceived` calls before dispatch) — bounded by transfer time
+  and inherent to WebSocket framing (a control frame can't interleave a non-fragmented data frame on the wire),
+  not RPC processing time.
+- **What actually delays the pong** is therefore **thread-pool starvation** in the consumer (sync-over-async /
+  blocking RPC handlers occupy pool threads, so the socket-receive completion can't be scheduled to parse the
+  ping) — a consumer/runtime concern, not a framework defect. A server-initiated keepalive
+  (`WsSession.SendPingAsync` on a timer) would **not** help a `python-websockets` client: its `ping_timeout`
+  waits for a **pong to its own ping**, and an inbound server ping doesn't reset that timer — so a keepalive
+  thread is complexity without the payoff. **Mitigation** (already in the `SignalCliNet.WsRpcServer` consumer):
+  app-level heartbeat, and clients set `ping_interval=None`. No framework change, no version bump.
+
 ## Git
 
 Work on a feature branch; do not push or commit unless asked. Prefer **one commit per OpenSpec
