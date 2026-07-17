@@ -1,14 +1,20 @@
 name: Publish NuGet
 
-# Публікує пакет JSON-RPC.NET у GitHub Packages при створенні релізу (тег),
-# а також вручну через workflow_dispatch.
+# Публікує пакет JSON-RPC.NET у GitHub Packages:
+#  - push тегу `v*` → workflow САМ створює GitHub Release (--generate-notes) і публікує пакет
+#    (auto-release, як у застосунку). Один workflow робить усе — реліз, створений через
+#    GITHUB_TOKEN, НЕ тригерить `release:published`, тож publish має бути в тому ж прогоні.
+#  - release:published (ручне створення релізу) → лише публікація (крок Create Release пропускається).
+#  - workflow_dispatch → ручний прогін.
 on:
+  push:
+    tags: ["v*"]
   release:
     types: [published]
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 env:
@@ -42,6 +48,17 @@ jobs:
       # Release-quality gate: жоден пакет не публікується, доки не пройде тестовий набір.
       - name: Test
         run: dotnet test tests/WsRpcServer.Tests/WsRpcServer.Tests.csproj -c Release --no-build
+
+      # Тег → workflow сам створює GitHub Release (лише після зеленого тесту). На release:published
+      # цей крок пропускається (реліз уже існує). Пакет живе у GitHub Packages, тож asset-ів не чіпляємо.
+      - name: Create GitHub Release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >
+          gh release create "${{ github.ref_name }}"
+          --title "JSON-RPC.NET ${{ github.ref_name }}"
+          --generate-notes
 
       - name: Pack JSON-RPC.NET
         run: dotnet pack src/WsRpcServer/WsRpcServer.csproj -c Release --no-build -o "${{ github.workspace }}/nupkgs"
