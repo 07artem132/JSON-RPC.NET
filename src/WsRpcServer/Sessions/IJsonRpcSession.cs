@@ -60,6 +60,19 @@ public interface IJsonRpcSession
     Task SendBinaryDataAsync(ReadOnlyMemory<byte> data);
 
     /// <summary>
+    /// Відправляє дані клієнту ТЕКСТОВИМ WebSocket-кадром (симетрично <see cref="SendBinaryDataAsync"/>).
+    /// </summary>
+    /// <param name="data">Дані (UTF-8 текст) для відправки.</param>
+    /// <returns>Завдання, яке представляє асинхронну операцію відправки.</returns>
+    /// <remarks>
+    /// Використовується транспортом, коли ввімкнено
+    /// <see cref="WsRpcServer.Core.JsonRpcServerConfig.UseTextFramesForOutgoingMessages"/>, для сумісності
+    /// з WHATWG-браузерними клієнтами, які очікують текстовий кадр для JSON (<c>event.data</c> = <c>string</c>,
+    /// а не <c>Blob</c>). Дефолт транспорту — бінарний кадр (<see cref="SendBinaryDataAsync"/>).
+    /// </remarks>
+    Task SendTextDataAsync(ReadOnlyMemory<byte> data);
+
+    /// <summary>
     /// Закриває WebSocket з'єднання з вказаним статусом та причиною.
     /// </summary>
     /// <param name="status">Статус закриття WebSocket.</param>

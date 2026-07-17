@@ -295,6 +295,89 @@ public abstract class AbstractJsonRpcSession(
     }
 
     /// <summary>
+    /// Передає дані у вихідний буфер WebSocket ТЕКСТОВИМ кадром (симетрично <see cref="SendBinaryDataAsync"/>).
+    /// </summary>
+    /// <param name="data">Дані (UTF-8 текст) для надсилання.</param>
+    /// <returns>
+    /// Уже завершене <see cref="Task"/>: метод викликає синхронний <c>SendTextAsync</c> NetCoreServer
+    /// і повертається миттєво (та сама L4-семантика, що й у <see cref="SendBinaryDataAsync"/>).
+    /// </returns>
+    /// <remarks>
+    /// Використовується транспортом, коли ввімкнено
+    /// <see cref="JsonRpcServerConfig.UseTextFramesForOutgoingMessages"/>: WHATWG-браузерний клієнт для
+    /// JSON очікує текстовий кадр (<c>event.data</c> = <c>string</c>, а не <c>Blob</c>). Дефолт лишає
+    /// бінарні кадри (<see cref="SendBinaryDataAsync"/>) для зворотної сумісності.
+    /// </remarks>
+    public virtual Task SendTextDataAsync(ReadOnlyMemory<byte> data)
+    {
+        if (IsDisposed)
+        {
+            AbstractJsonRpcSessionLog.TextSendAfterDispose(Logger, Id);
+            return Task.CompletedTask;
+        }
+
+        try
+        {
+            AbstractJsonRpcSessionLog.SendingTextData(Logger, data.Length, Id);
+
+            // Використовуємо вбудований метод NetCoreServer для надсилання текстового кадру
+            SendTextAsync(data.Span);
+        }
+        catch (Exception ex)
+        {
+            AbstractJsonRpcSessionLog.TextSendError(Logger, ex, data.Length, Id);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Хук узгодження WebSocket-субпротоколу під час 101-upgrade (browser-interop, opt-in).
+    /// </summary>
+    /// <param name="offeredSubprotocols">Субпротоколи, запропоновані клієнтом у <c>Sec-WebSocket-Protocol</c>
+    /// (кілька заголовків АБО comma-list; може бути порожнім).</param>
+    /// <returns>
+    /// Субпротокол для echo назад клієнту (зазвичай з-поміж <paramref name="offeredSubprotocols"/>),
+    /// або <c>null</c> (за замовчуванням) — тоді 101-відповідь не змінюється (поведінка як раніше).
+    /// </returns>
+    /// <remarks>
+    /// WHATWG-браузерний <c>WebSocket</c>, що передає субпротокол у конструкторі, вимагає, щоб сервер
+    /// echo-нув узгоджений субпротокол у 101-відповіді, інакше з'єднання не досягне open. Споживач
+    /// override-ить цей хук; базова реалізація повертає <c>null</c> (нічого не узгоджено) — тож без
+    /// override поведінка фреймворку незмінна.
+    /// </remarks>
+    protected virtual string? NegotiateSubprotocol(IReadOnlyList<string> offeredSubprotocols) => null;
+
+    /// <summary>
+    /// Перехоплює завершення WebSocket-рукостискання (101-upgrade), щоб за потреби узгодити субпротокол
+    /// і коректно echo-нути його у відповідь.
+    /// </summary>
+    /// <param name="request">HTTP-запит рукостискання.</param>
+    /// <param name="response">HTTP-відповідь 101 Switching Protocols.</param>
+    /// <returns><c>true</c>, якщо рукостискання дозволено (як і базова реалізація).</returns>
+    /// <remarks>
+    /// Якщо <see cref="NegotiateSubprotocol"/> повертає не-<c>null</c>, база ПОВНІСТЮ перебудовує
+    /// 101-відповідь із заголовком <c>Sec-WebSocket-Protocol</c> серед заголовків (до тіла) за RFC 6455 —
+    /// це інкапсулює обхід дефекту NetCoreServer 8.0.7, де <c>OnWsConnecting</c> викликається ПІСЛЯ
+    /// <c>SetBody()</c>, тож наївний <c>SetHeader</c> «протік» би у потік як сміття-кадр. Якщо хук дав
+    /// <c>null</c> — повертаємо <c>base.OnWsConnecting(...)</c> (поведінка незмінна).
+    /// </remarks>
+    public override bool OnWsConnecting(HttpRequest request, HttpResponse response)
+    {
+        var offered = WsUpgradeInterop.ParseOfferedSubprotocols(request);
+        var negotiated = NegotiateSubprotocol(offered);
+
+        if (!string.IsNullOrEmpty(negotiated) &&
+            WsUpgradeInterop.TryWriteUpgradeResponse(request, response, negotiated))
+        {
+            AbstractJsonRpcSessionLog.SubprotocolNegotiated(Logger, negotiated, Id);
+            return true;
+        }
+
+        return base.OnWsConnecting(request, response);
+    }
+
+    /// <summary>
     /// Обробляє WebSocket повідомлення ping.
     /// Викликається NetCoreServer при отриманні ping кадру.
     /// </summary>

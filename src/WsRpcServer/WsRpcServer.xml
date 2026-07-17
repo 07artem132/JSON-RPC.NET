@@ -850,6 +850,18 @@
             <c>0</c> зберігає необмежену поведінку (additive).
             </remarks>
         </member>
+        <member name="P:WsRpcServer.Core.JsonRpcServerConfig.UseTextFramesForOutgoingMessages">
+            <summary>
+            Коли <c>true</c> — вихідні JSON-RPC кадри надсилаються ТЕКСТОВИМ WebSocket-кадром замість бінарного.
+            За замовчуванням <c>false</c> (бінарна поведінка, зворотна сумісність).
+            </summary>
+            <remarks>
+            WHATWG-браузерний клієнт для JSON очікує текстовий кадр (<c>event.data</c> = <c>string</c>, а не
+            <c>Blob</c>). Увімкнення цього прапорця забезпечує browser-interop; дефолт лишає бінарні кадри для
+            сумісності з наявними (не-браузерними) споживачами. Прапорець булевий — <c>[Range]</c>-валідація
+            не потрібна.
+            </remarks>
+        </member>
         <member name="T:WsRpcServer.Core.JsonRpcServerConfigValidator">
              <summary>
              Валідатор конфігурації <see cref="T:WsRpcServer.Core.JsonRpcServerConfig"/>, згенерований під час компіляції.
@@ -2434,6 +2446,55 @@
             Внутрішньо використовує метод SendBinaryAsync з базового класу NetCoreServer.WsSession.
             </remarks>
         </member>
+        <member name="M:WsRpcServer.Sessions.AbstractJsonRpcSession.SendTextDataAsync(System.ReadOnlyMemory{System.Byte})">
+            <summary>
+            Передає дані у вихідний буфер WebSocket ТЕКСТОВИМ кадром (симетрично <see cref="M:WsRpcServer.Sessions.AbstractJsonRpcSession.SendBinaryDataAsync(System.ReadOnlyMemory{System.Byte})"/>).
+            </summary>
+            <param name="data">Дані (UTF-8 текст) для надсилання.</param>
+            <returns>
+            Уже завершене <see cref="T:System.Threading.Tasks.Task"/>: метод викликає синхронний <c>SendTextAsync</c> NetCoreServer
+            і повертається миттєво (та сама L4-семантика, що й у <see cref="M:WsRpcServer.Sessions.AbstractJsonRpcSession.SendBinaryDataAsync(System.ReadOnlyMemory{System.Byte})"/>).
+            </returns>
+            <remarks>
+            Використовується транспортом, коли ввімкнено
+            <see cref="P:WsRpcServer.Core.JsonRpcServerConfig.UseTextFramesForOutgoingMessages"/>: WHATWG-браузерний клієнт для
+            JSON очікує текстовий кадр (<c>event.data</c> = <c>string</c>, а не <c>Blob</c>). Дефолт лишає
+            бінарні кадри (<see cref="M:WsRpcServer.Sessions.AbstractJsonRpcSession.SendBinaryDataAsync(System.ReadOnlyMemory{System.Byte})"/>) для зворотної сумісності.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Sessions.AbstractJsonRpcSession.NegotiateSubprotocol(System.Collections.Generic.IReadOnlyList{System.String})">
+            <summary>
+            Хук узгодження WebSocket-субпротоколу під час 101-upgrade (browser-interop, opt-in).
+            </summary>
+            <param name="offeredSubprotocols">Субпротоколи, запропоновані клієнтом у <c>Sec-WebSocket-Protocol</c>
+            (кілька заголовків АБО comma-list; може бути порожнім).</param>
+            <returns>
+            Субпротокол для echo назад клієнту (зазвичай з-поміж <paramref name="offeredSubprotocols"/>),
+            або <c>null</c> (за замовчуванням) — тоді 101-відповідь не змінюється (поведінка як раніше).
+            </returns>
+            <remarks>
+            WHATWG-браузерний <c>WebSocket</c>, що передає субпротокол у конструкторі, вимагає, щоб сервер
+            echo-нув узгоджений субпротокол у 101-відповіді, інакше з'єднання не досягне open. Споживач
+            override-ить цей хук; базова реалізація повертає <c>null</c> (нічого не узгоджено) — тож без
+            override поведінка фреймворку незмінна.
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Sessions.AbstractJsonRpcSession.OnWsConnecting(NetCoreServer.HttpRequest,NetCoreServer.HttpResponse)">
+            <summary>
+            Перехоплює завершення WebSocket-рукостискання (101-upgrade), щоб за потреби узгодити субпротокол
+            і коректно echo-нути його у відповідь.
+            </summary>
+            <param name="request">HTTP-запит рукостискання.</param>
+            <param name="response">HTTP-відповідь 101 Switching Protocols.</param>
+            <returns><c>true</c>, якщо рукостискання дозволено (як і базова реалізація).</returns>
+            <remarks>
+            Якщо <see cref="M:WsRpcServer.Sessions.AbstractJsonRpcSession.NegotiateSubprotocol(System.Collections.Generic.IReadOnlyList{System.String})"/> повертає не-<c>null</c>, база ПОВНІСТЮ перебудовує
+            101-відповідь із заголовком <c>Sec-WebSocket-Protocol</c> серед заголовків (до тіла) за RFC 6455 —
+            це інкапсулює обхід дефекту NetCoreServer 8.0.7, де <c>OnWsConnecting</c> викликається ПІСЛЯ
+            <c>SetBody()</c>, тож наївний <c>SetHeader</c> «протік» би у потік як сміття-кадр. Якщо хук дав
+            <c>null</c> — повертаємо <c>base.OnWsConnecting(...)</c> (поведінка незмінна).
+            </remarks>
+        </member>
         <member name="M:WsRpcServer.Sessions.AbstractJsonRpcSession.OnWsPing(System.Byte[],System.Int64,System.Int64)">
             <summary>
             Обробляє WebSocket повідомлення ping.
@@ -2563,6 +2624,45 @@
             <param name="data">Дані для надсилання.</param>
             <returns>Уже завершене <see cref="T:System.Threading.Tasks.Task"/>.</returns>
         </member>
+        <member name="M:WsRpcServer.Sessions.AbstractSecureJsonRpcSession.SendTextDataAsync(System.ReadOnlyMemory{System.Byte})">
+            <summary>
+            Передає дані у вихідний буфер WebSocket ТЕКСТОВИМ кадром (симетрично <see cref="M:WsRpcServer.Sessions.AbstractSecureJsonRpcSession.SendBinaryDataAsync(System.ReadOnlyMemory{System.Byte})"/>).
+            </summary>
+            <param name="data">Дані (UTF-8 текст) для надсилання.</param>
+            <returns>Уже завершене <see cref="T:System.Threading.Tasks.Task"/> — <c>SendTextAsync</c> NetCoreServer синхронний.</returns>
+            <remarks>
+            Використовується транспортом, коли ввімкнено
+            <see cref="P:WsRpcServer.Core.JsonRpcServerConfig.UseTextFramesForOutgoingMessages"/> (WHATWG browser interop:
+            <c>event.data</c> для JSON — рядок, а не <c>Blob</c>). Дефолт лишає бінарні кадри
+            (<see cref="M:WsRpcServer.Sessions.AbstractSecureJsonRpcSession.SendBinaryDataAsync(System.ReadOnlyMemory{System.Byte})"/>).
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Sessions.AbstractSecureJsonRpcSession.NegotiateSubprotocol(System.Collections.Generic.IReadOnlyList{System.String})">
+            <summary>
+            Хук узгодження WebSocket-субпротоколу під час 101-upgrade (browser-interop, opt-in).
+            </summary>
+            <param name="offeredSubprotocols">Субпротоколи, запропоновані клієнтом у <c>Sec-WebSocket-Protocol</c>
+            (кілька заголовків АБО comma-list; може бути порожнім).</param>
+            <returns>Субпротокол для echo, або <c>null</c> (за замовчуванням) — тоді відповідь незмінна.</returns>
+            <remarks>
+            Дзеркалить <see cref="M:WsRpcServer.Sessions.AbstractJsonRpcSession.NegotiateSubprotocol(System.Collections.Generic.IReadOnlyList{System.String})"/> для захищеної (wss) гілки:
+            WHATWG-браузерний клієнт вимагає echo узгодженого субпротоколу у 101-відповіді. Базова реалізація
+            повертає <c>null</c> (поведінка незмінна без override).
+            </remarks>
+        </member>
+        <member name="M:WsRpcServer.Sessions.AbstractSecureJsonRpcSession.OnWsConnecting(NetCoreServer.HttpRequest,NetCoreServer.HttpResponse)">
+            <summary>
+            Перехоплює 101-upgrade, щоб за потреби echo-нути узгоджений субпротокол (browser-interop).
+            </summary>
+            <param name="request">HTTP-запит рукостискання.</param>
+            <param name="response">HTTP-відповідь 101 Switching Protocols.</param>
+            <returns><c>true</c>, якщо рукостискання дозволено.</returns>
+            <remarks>
+            Якщо <see cref="M:WsRpcServer.Sessions.AbstractSecureJsonRpcSession.NegotiateSubprotocol(System.Collections.Generic.IReadOnlyList{System.String})"/> дав не-<c>null</c> — база повністю перебудовує 101-відповідь
+            із <c>Sec-WebSocket-Protocol</c> за RFC 6455 (інкапсулює обхід дефекту NetCoreServer 8.0.7, де
+            <c>OnWsConnecting</c> викликається ПІСЛЯ <c>SetBody()</c>); інакше — <c>base.OnWsConnecting(...)</c>.
+            </remarks>
+        </member>
         <member name="M:WsRpcServer.Sessions.AbstractSecureJsonRpcSession.OnWsPing(System.Byte[],System.Int64,System.Int64)">
             <summary>
             Обробляє WebSocket ping (логує + надсилає pong через базову реалізацію).
@@ -2634,6 +2734,19 @@
             потокове відео або аудіо, тощо.
             </remarks>
         </member>
+        <member name="M:WsRpcServer.Sessions.IJsonRpcSession.SendTextDataAsync(System.ReadOnlyMemory{System.Byte})">
+            <summary>
+            Відправляє дані клієнту ТЕКСТОВИМ WebSocket-кадром (симетрично <see cref="M:WsRpcServer.Sessions.IJsonRpcSession.SendBinaryDataAsync(System.ReadOnlyMemory{System.Byte})"/>).
+            </summary>
+            <param name="data">Дані (UTF-8 текст) для відправки.</param>
+            <returns>Завдання, яке представляє асинхронну операцію відправки.</returns>
+            <remarks>
+            Використовується транспортом, коли ввімкнено
+            <see cref="P:WsRpcServer.Core.JsonRpcServerConfig.UseTextFramesForOutgoingMessages"/>, для сумісності
+            з WHATWG-браузерними клієнтами, які очікують текстовий кадр для JSON (<c>event.data</c> = <c>string</c>,
+            а не <c>Blob</c>). Дефолт транспорту — бінарний кадр (<see cref="M:WsRpcServer.Sessions.IJsonRpcSession.SendBinaryDataAsync(System.ReadOnlyMemory{System.Byte})"/>).
+            </remarks>
+        </member>
         <member name="M:WsRpcServer.Sessions.IJsonRpcSession.Close(System.Net.WebSockets.WebSocketCloseStatus,System.String)">
             <summary>
             Закриває WebSocket з'єднання з вказаним статусом та причиною.
@@ -2652,6 +2765,44 @@
             - 1003: Unsupported Data (непідтримуваний тип даних)
             - ...і багато інших
             </remarks>
+        </member>
+        <member name="T:WsRpcServer.Sessions.WsUpgradeInterop">
+            <summary>
+            Транспортна «glue»-логіка узгодження WebSocket-субпротоколу під час 101-upgrade.
+            Спільна для плейн-текст (<see cref="T:WsRpcServer.Sessions.AbstractJsonRpcSession"/>) і захищеної
+            (<see cref="T:WsRpcServer.Sessions.AbstractSecureJsonRpcSession"/>) сесій: обидві мають однакову ваду NetCoreServer 8.0.7,
+            але різні базові типи (окремі ієрархії NetCoreServer), тож логіку інкапсульовано тут, а не дубльовано.
+            </summary>
+            <remarks>
+            NetCoreServer 8.0.7 викликає <c>OnWsConnecting(request, response)</c> ПІСЛЯ <c>response.SetBody()</c>
+            (порожній рядок-роздільник уже дописано до відповіді). Тому додавання заголовка через
+            <c>response.SetHeader("Sec-WebSocket-Protocol", …)</c> у цій точці «протікає» у WebSocket-потік як
+            сміття-кадр (WHATWG-клієнт бачить «reserved bits set» і не досягає open). Щоб коректно echo-нути
+            субпротокол, відповідь ПОВНІСТЮ перебудовується (Clear → SetBegin(101) → заголовки → SetBody) за
+            RFC 6455 — цим фреймворк інкапсулює обхід, який раніше кожен споживач робив вручну.
+            </remarks>
+        </member>
+        <member name="F:WsRpcServer.Sessions.WsUpgradeInterop.WebSocketGuid">
+            <summary>RFC 6455 §4.2.2 — «магічний» GUID для обчислення <c>Sec-WebSocket-Accept</c>.</summary>
+        </member>
+        <member name="M:WsRpcServer.Sessions.WsUpgradeInterop.ParseOfferedSubprotocols(NetCoreServer.HttpRequest)">
+            <summary>
+            Парсить усі запропоновані клієнтом субпротоколи із запиту: підтримує як кілька окремих заголовків
+            <c>Sec-WebSocket-Protocol</c>, так і один comma-list. Повертає їх у порядку появи (без порожніх).
+            </summary>
+            <param name="request">HTTP-запит рукостискання WebSocket.</param>
+            <returns>Список запропонованих субпротоколів (може бути порожнім).</returns>
+        </member>
+        <member name="M:WsRpcServer.Sessions.WsUpgradeInterop.TryWriteUpgradeResponse(NetCoreServer.HttpRequest,NetCoreServer.HttpResponse,System.String)">
+            <summary>
+            Повністю перебудовує успішну 101-відповідь, додаючи <c>Sec-WebSocket-Protocol</c> серед
+            заголовків (до тіла), і завершує її <c>SetBody</c>. Повертає <c>false</c>, якщо у запиті немає
+            валідного <c>Sec-WebSocket-Key</c> (тоді викликач лишає стандартну поведінку без змін).
+            </summary>
+            <param name="request">HTTP-запит рукостискання (джерело <c>Sec-WebSocket-Key</c>).</param>
+            <param name="response">HTTP-відповідь, що перебудовується на місці.</param>
+            <param name="subprotocol">Узгоджений субпротокол для echo.</param>
+            <returns><c>true</c>, якщо відповідь перебудовано; інакше <c>false</c>.</returns>
         </member>
         <member name="T:WsRpcServer.Subscriptions.AbstractSubscriptionManager`2">
              <summary>
@@ -2856,6 +3007,13 @@
         <member name="F:WsRpcServer.Transport.WebSocketMessageHandler._maxConsecutiveParseFailures">
             <summary>
             Поріг послідовних помилок розбору, після якого з'єднання примусово закривається (H2 anti-DoS).
+            </summary>
+        </member>
+        <member name="F:WsRpcServer.Transport.WebSocketMessageHandler._useTextFrames">
+            <summary>
+            Коли <c>true</c> — вихідні JSON-RPC повідомлення надсилаються текстовим кадром (WHATWG browser
+            interop), інакше — бінарним (дефолт, зворотна сумісність). Читається з
+            <see cref="P:WsRpcServer.Core.JsonRpcServerConfig.UseTextFramesForOutgoingMessages"/>.
             </summary>
         </member>
         <member name="M:WsRpcServer.Transport.WebSocketMessageHandler.ProcessReceivedDataAsync(System.ReadOnlyMemory{System.Byte})">

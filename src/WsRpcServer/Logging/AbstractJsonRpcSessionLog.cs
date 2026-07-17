@@ -77,4 +77,20 @@ internal static partial class AbstractJsonRpcSessionLog
     [LoggerMessage(EventId = 1116, Level = LogLevel.Debug,
         Message = "Отримано WebSocket ping для клієнта {ClientId}")]
     public static partial void PingReceived(ILogger logger, Guid clientId);
+
+    [LoggerMessage(EventId = 1117, Level = LogLevel.Debug,
+        Message = "Узгоджено WebSocket-субпротокол {Subprotocol} для клієнта {ClientId}")]
+    public static partial void SubprotocolNegotiated(ILogger logger, string subprotocol, Guid clientId);
+
+    [LoggerMessage(EventId = 1118, Level = LogLevel.Warning,
+        Message = "Спроба надіслати текстові дані після утилізації сесії {ClientId}")]
+    public static partial void TextSendAfterDispose(ILogger logger, Guid clientId);
+
+    [LoggerMessage(EventId = 1119, Level = LogLevel.Debug,
+        Message = "Надсилання текстових даних розміром {Size} байтів для клієнта {ClientId}")]
+    public static partial void SendingTextData(ILogger logger, int size, Guid clientId);
+
+    [LoggerMessage(EventId = 1120, Level = LogLevel.Error,
+        Message = "Помилка надсилання текстових даних розміром {Size} байтів для клієнта {ClientId}")]
+    public static partial void TextSendError(ILogger logger, Exception ex, int size, Guid clientId);
 }
