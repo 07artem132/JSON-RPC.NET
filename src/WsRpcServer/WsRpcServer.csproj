@@ -30,24 +30,24 @@
     </ItemGroup>
 
     <ItemGroup>
-      <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.9" />
+      <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.14" />
       <!--
         M5/H1: options-pattern валідація конфігурації + композиційний корінь.
         Прямий референс (не транзитивний) потрібен, щоб увімкнувся source-generator
         [OptionsValidator] (analyzer'и не успадковуються транзитивно). Лінія 10.0.x
         узгоджена з Microsoft.Extensions.Logging.Abstractions вище.
       -->
-      <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.9" />
+      <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.14" />
       <PackageReference Include="NetCoreServer" Version="8.0.7" />
-      <PackageReference Include="StreamJsonRpc" Version="2.25.29" />
+      <PackageReference Include="StreamJsonRpc" Version="2.26.150" />
       <!--
-        Прямий pin транзитивної залежності StreamJsonRpc → MessagePack:
-        2.5.192 мала high-severity вразливість (GHSA-hv8m-jj95-wg3x / NU1903).
-        2.5.302 — патчена версія у тій самій 2.5.x-лінії, і саме її тягне
-        StreamJsonRpc 2.25.29 транзитивно (бінарно сумісна). Тримаємо явний pin,
-        доки StreamJsonRpc не почне тягнути непатчену MessagePack ≥ 2.5.198.
+        Прямий pin транзитивної залежності StreamJsonRpc → MessagePack.
+        Історія: 2.5.192 — GHSA-hv8m-jj95-wg3x (NU1903), 2.5.302 — GHSA-qhrr-8q5h-9q3h
+        (NU1902). 2.5.307 — патчена версія у тій самій 2.5.x-лінії (бінарно сумісна), і саме
+        її тягне StreamJsonRpc 2.26.150 транзитивно. Тримаємо явний pin як нижню межу, щоб
+        майбутній bump StreamJsonRpc не відкотив MessagePack на вразливу версію.
       -->
-      <PackageReference Include="MessagePack" Version="2.5.302" />
+      <PackageReference Include="MessagePack" Version="2.5.307" />
     </ItemGroup>
 
     <!--
