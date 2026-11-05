@@ -7,7 +7,7 @@
 > TL;DR: увімкни `[assembly: GenerateRpcServiceCatalog]` + зареєструй
 > `AddGeneratedRpcServiceCatalog()` та `AddGeneratedRpcMethodBinder()` — і **наш** шар стане
 > reflection-free. Але `<IsAotCompatible>true</IsAotCompatible>` на бібліотеці лишається **вимкненим**,
-> бо StreamJsonRpc 2.25.29 серіалізує payload'и через рефлексію.
+> бо StreamJsonRpc (перевірено на 2.25.29) серіалізує payload'и через рефлексію.
 
 ---
 
@@ -60,7 +60,7 @@ services.AddGeneratedRpcMethodBinder();      // dispatch без рефлексі
 
 ## Чому `<IsAotCompatible>` досі вимкнено (upstream-блокер)
 
-Навіть із AOT-clean discovery + dispatch, **StreamJsonRpc 2.25.29** серіалізує самі JSON-RPC envelope'и
+Навіть із AOT-clean discovery + dispatch, **StreamJsonRpc (перевірено на 2.25.29)** серіалізує самі JSON-RPC envelope'и
 / payload'и через рефлексію: `dotnet publish` показує `IL3053`/`IL2104` на `StreamJsonRpc.dll` +
 транзитивний `Newtonsoft.Json`. End-to-end AOT RPC-payload'и — **upstream-прогалина**, не наша. Тому
 бібліотека свідомо **не** ставить `<IsAotCompatible>true</IsAotCompatible>` — щоб не давати хибну

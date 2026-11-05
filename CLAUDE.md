@@ -20,7 +20,7 @@ It is a **framework of abstract base classes** — consumers subclass `AbstractJ
 `[IRpcService]` discovery. The primary downstream consumer is **SignalCliNet.WsRpcServer**.
 
 - Target framework: **net10.0**. Package version lives in `Directory.Build.props`
-  (`<WsRpcServerPackageVersion>`, currently **2.8.0**) — never hardcode `<Version>` in a csproj.
+  (`<WsRpcServerPackageVersion>`, currently **2.8.1**) — never hardcode `<Version>` in a csproj.
 - Five layers: Transport (WebSocket) → Protocol (JSON-RPC 2.0) → Session → Service → Subscription.
   Optional **secure** transport (TLS/mTLS) + RPC authorization layer over them (`secure-transport-mtls`, 2.6.0).
   Optional **observability** (`Meter`/`ActivitySource` "WsRpcServer") + concurrent-connection quota (`observability-and-resilience`, 2.7.0).
@@ -103,7 +103,7 @@ Path-scoped agent instructions live in `.claude/rules/` (load conditionally when
    binder is **not** 1:1 with `AddLocalRpcTarget` — it exposes only **interface** methods and drops target
    events / `RpcMarshalable` / `JsonRpcTargetOptions`; consumers needing those keep the reflection path
    (don't register the binder). **Still do not flip `<IsAotCompatible>true</IsAotCompatible>` on the
-   library**: StreamJsonRpc's own formatter/envelope serialization is not AOT-clean in 2.25.29 (publish
+   library**: StreamJsonRpc's own formatter/envelope serialization is not AOT-clean (verified on 2.25.29, not re-verified on 2.26.150; publish
    shows `IL3053`/`IL2104` on `StreamJsonRpc.dll` + transitive `Newtonsoft.Json`) — end-to-end AOT RPC
    payloads are an upstream gap, not ours. Honoring `[JsonRpcMethod]`/`[JsonRpcIgnore]` + camelCase is in
    the binder; unsupported method shapes (generic/ref/out/in/>16 params) emit `WSRPC002` and are skipped.
@@ -220,7 +220,14 @@ This repo is mid-maturation. The current floor, established by `foundation-clust
   `SendTextAsync`); `WebSocketMessageHandler.WriteCoreAsync` routes by the flag. New session-block EventIds
   1117–1120. No new NuGet dep. Suite 164 → 170 (2 subprotocol loopback + 4 text-frame guards). See
   `openspec/changes/browser-ws-interop/`.
-- **Backlog** (from `AUDIT-FINDINGS.md`): **empty** — all 20 findings shipped/resolved, plus the AOT track (`registry-sourcegen-discovery` → `aot-readiness` → `aot-rpc-dispatch`) is complete for the part we own (discovery + dispatch). The remaining AOT limit is **upstream**: StreamJsonRpc 2.25.29's formatter/envelope serialization isn't AOT-clean (IL3053), so `<IsAotCompatible>true</IsAotCompatible>` stays off until StreamJsonRpc ships an AOT-safe formatter. The StreamJsonRpc-replacement question was researched (spike) and rejected.
+- `deps-refresh` (**2.8.1**, no OpenSpec — dependency-only patch) — closes NuGet advisory GHSA-qhrr-8q5h-9q3h
+  (`MessagePack` 2.5.302 → 2.5.307, NU1902 failed restore under the audit gate), `StreamJsonRpc` 2.25.29 → 2.26.150
+  (it now pulls MessagePack 2.5.307 itself; the direct pin stays as a floor), `Microsoft.Extensions.*` 10.0.9 → 10.0.14,
+  test tooling (`Microsoft.NET.Test.Sdk` 18.11.0, `coverlet.collector` 10.1.0, `Moq` 4.21.0), `Spectre.Console` 0.57.2
+  (example). Deliberately **not** bumped: `Microsoft.CodeAnalysis.CSharp` 5.0.0 (the source generator's Roslyn floor —
+  a higher ref would refuse to load in older consumer compilers), `Terminal.Gui` 1.x (2.x is an API rewrite),
+  `xunit` 2.x / `xunit.runner.visualstudio` 3.x (v3 is a migration, not a bump). Suite stays 170.
+- **Backlog** (from `AUDIT-FINDINGS.md`): **empty** — all 20 findings shipped/resolved, plus the AOT track (`registry-sourcegen-discovery` → `aot-readiness` → `aot-rpc-dispatch`) is complete for the part we own (discovery + dispatch). The remaining AOT limit is **upstream**: StreamJsonRpc's formatter/envelope serialization isn't AOT-clean (IL3053, verified on 2.25.29; 2.26.150 still marks `SystemTextJsonFormatter` `[RequiresDynamicCode]`), so `<IsAotCompatible>true</IsAotCompatible>` stays off until StreamJsonRpc ships an AOT-safe formatter. The StreamJsonRpc-replacement question was researched (spike) and rejected.
 
 ## Known upstream limitations
 
