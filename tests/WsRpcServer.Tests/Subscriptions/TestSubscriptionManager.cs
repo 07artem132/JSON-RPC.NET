@@ -174,7 +174,7 @@ namespace WsRpcServer.Tests.Subscriptions
 
             // Act
             // Создаем подписку и получаем ее идентификатор
-            var subscriptionId = await _manager.Subscribe(_clientId, _testAccount, eventTypes);
+            var subscriptionId = await _manager.Subscribe(_clientId, _testAccount, eventTypes, TestContext.Current.CancellationToken);
 
             // Assert
             // Проверяем, что идентификатор подписки возвращен и подписка создана
@@ -192,8 +192,8 @@ namespace WsRpcServer.Tests.Subscriptions
 
             // Act
             // Создаем две подписки для одного клиента
-            var subscriptionId1 = await _manager.Subscribe(_clientId, _testAccount, eventTypes1);
-            var subscriptionId2 = await _manager.Subscribe(_clientId, _testAccount, eventTypes2);
+            var subscriptionId1 = await _manager.Subscribe(_clientId, _testAccount, eventTypes1, TestContext.Current.CancellationToken);
+            var subscriptionId2 = await _manager.Subscribe(_clientId, _testAccount, eventTypes2, TestContext.Current.CancellationToken);
 
             // Assert
             // Проверяем, что идентификаторы подписок уникальны
@@ -212,12 +212,12 @@ namespace WsRpcServer.Tests.Subscriptions
             // Создаем подписки до достижения максимума
             for (int i = 0; i < _maxSubscriptions; i++)
             {
-                await _manager.Subscribe(_clientId, _testAccount, eventTypes);
+                await _manager.Subscribe(_clientId, _testAccount, eventTypes, TestContext.Current.CancellationToken);
             }
 
             // Попытка создать еще одну подписку должна вызвать исключение
             await Assert.ThrowsAsync<InvalidOperationException>(async () => 
-                await _manager.Subscribe(_clientId, _testAccount, eventTypes));
+                await _manager.Subscribe(_clientId, _testAccount, eventTypes, TestContext.Current.CancellationToken));
         }
 
         [Fact]
@@ -226,11 +226,11 @@ namespace WsRpcServer.Tests.Subscriptions
             // Arrange
             // Создаем подписку, которую затем отменим
             var eventTypes = _eventsCreateOnly;
-            var subscriptionId = await _manager.Subscribe(_clientId, _testAccount, eventTypes);
+            var subscriptionId = await _manager.Subscribe(_clientId, _testAccount, eventTypes, TestContext.Current.CancellationToken);
 
             // Act
             // Отменяем существующую подписку
-            var result = await _manager.Unsubscribe(_clientId, subscriptionId);
+            var result = await _manager.Unsubscribe(_clientId, subscriptionId, TestContext.Current.CancellationToken);
 
             // Assert
             // Проверяем, что подписка успешно отменена
@@ -247,7 +247,7 @@ namespace WsRpcServer.Tests.Subscriptions
 
             // Act
             // Пытаемся отменить несуществующую подписку
-            var result = await _manager.Unsubscribe(_clientId, nonExistingSubscriptionId);
+            var result = await _manager.Unsubscribe(_clientId, nonExistingSubscriptionId, TestContext.Current.CancellationToken);
 
             // Assert
             // Проверяем, что результат операции отрицательный
@@ -260,12 +260,12 @@ namespace WsRpcServer.Tests.Subscriptions
             // Arrange
             // Используем существующую подписку, но для другого клиента
             var eventTypes = _eventsCreateOnly;
-            var subscriptionId = await _manager.Subscribe(_clientId, _testAccount, eventTypes);
+            var subscriptionId = await _manager.Subscribe(_clientId, _testAccount, eventTypes, TestContext.Current.CancellationToken);
             var differentClientId = Guid.NewGuid();
 
             // Act
             // Пытаемся отменить подписку от имени другого клиента
-            var result = await _manager.Unsubscribe(differentClientId, subscriptionId);
+            var result = await _manager.Unsubscribe(differentClientId, subscriptionId, TestContext.Current.CancellationToken);
 
             // Assert
             // Проверяем, что результат операции отрицательный
@@ -281,11 +281,11 @@ namespace WsRpcServer.Tests.Subscriptions
             // Создаем подписку, которую затем обновим
             var originalEventTypes = _eventsCreateOnly;
             var newEventTypes = _eventsCreateUpdateDelete;
-            var subscriptionId = await _manager.Subscribe(_clientId, _testAccount, originalEventTypes);
+            var subscriptionId = await _manager.Subscribe(_clientId, _testAccount, originalEventTypes, TestContext.Current.CancellationToken);
 
             // Act
             // Обновляем существующую подписку
-            var result = await _manager.UpdateSubscription(_clientId, subscriptionId, newEventTypes);
+            var result = await _manager.UpdateSubscription(_clientId, subscriptionId, newEventTypes, TestContext.Current.CancellationToken);
 
             // Assert
             // Проверяем, что подписка успешно обновлена
@@ -302,7 +302,7 @@ namespace WsRpcServer.Tests.Subscriptions
 
             // Act
             // Пытаемся обновить несуществующую подписку
-            var result = await _manager.UpdateSubscription(_clientId, nonExistingSubscriptionId, newEventTypes);
+            var result = await _manager.UpdateSubscription(_clientId, nonExistingSubscriptionId, newEventTypes, TestContext.Current.CancellationToken);
 
             // Assert
             // Проверяем, что результат операции отрицательный
@@ -317,8 +317,8 @@ namespace WsRpcServer.Tests.Subscriptions
             var clientId1 = Guid.NewGuid();
             var clientId2 = Guid.NewGuid();
             
-            await _manager.Subscribe(clientId1, _testAccount, _eventsCreateUpdate);
-            await _manager.Subscribe(clientId2, _testAccount, _eventsDeleteOnly);
+            await _manager.Subscribe(clientId1, _testAccount, _eventsCreateUpdate, TestContext.Current.CancellationToken);
+            await _manager.Subscribe(clientId2, _testAccount, _eventsDeleteOnly, TestContext.Current.CancellationToken);
 
             // Act
             // Получаем клиентов для события типа "Update"
@@ -335,7 +335,7 @@ namespace WsRpcServer.Tests.Subscriptions
         {
             // Arrange
             // Создаем подписки с типами событий, не соответствующими запрашиваемому
-            await _manager.Subscribe(_clientId, _testAccount, _eventsCreateUpdate);
+            await _manager.Subscribe(_clientId, _testAccount, _eventsCreateUpdate, TestContext.Current.CancellationToken);
 
             // Act
             // Получаем клиентов для события типа, на который никто не подписан
@@ -355,9 +355,9 @@ namespace WsRpcServer.Tests.Subscriptions
             var clientId2 = Guid.NewGuid();
             var clientId3 = Guid.NewGuid();
             
-            await _manager.Subscribe(clientId1, _testAccount, _eventsCreateOnly);
-            await _manager.Subscribe(clientId2, _testAccount, _eventsCreateUpdate);
-            await _manager.Subscribe(clientId3, _testAccount, _eventsDeleteOnly);
+            await _manager.Subscribe(clientId1, _testAccount, _eventsCreateOnly, TestContext.Current.CancellationToken);
+            await _manager.Subscribe(clientId2, _testAccount, _eventsCreateUpdate, TestContext.Current.CancellationToken);
+            await _manager.Subscribe(clientId3, _testAccount, _eventsDeleteOnly, TestContext.Current.CancellationToken);
 
             // Act
             // Получаем клиентов для события типа "Create"
@@ -390,19 +390,19 @@ namespace WsRpcServer.Tests.Subscriptions
         public async Task Dispose_WhileLockHeld_DrainsBeforeDisposingWithoutThrow()
         {
             // Arrange — зовнішній тримач захоплює OperationLock (імітує in-flight операцію).
-            await _manager.OperationLockAccessor.WaitAsync();
+            await _manager.OperationLockAccessor.WaitAsync(TestContext.Current.CancellationToken);
 
             // Act — Dispose у фоні: має блокуватись на дренажі семафора, поки тримач не відпустить (H4).
-            var disposeTask = Task.Run(() => _manager.Dispose());
+            var disposeTask = Task.Run(() => _manager.Dispose(), TestContext.Current.CancellationToken);
 
             // Поки лок утримується, Dispose НЕ може завершитися (детерміновано: Wait блокується).
-            var finished = await Task.WhenAny(disposeTask, Task.Delay(200));
+            var finished = await Task.WhenAny(disposeTask, Task.Delay(200, TestContext.Current.CancellationToken));
             Assert.NotSame(disposeTask, finished);
             Assert.False(_manager.IsDisposedAccessor);
 
             // Відпускаємо лок — Dispose дренує й завершується без винятку.
             _manager.OperationLockAccessor.Release();
-            await disposeTask.WaitAsync(TimeSpan.FromSeconds(5));
+            await disposeTask.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
             // Assert
             Assert.True(_manager.IsDisposedAccessor);
@@ -431,19 +431,19 @@ namespace WsRpcServer.Tests.Subscriptions
         {
             // Arrange — M2 guard: база САМА серіалізує мутації через OperationLock. Зовнішній тримач
             // захоплює лок; Subscribe не має проходити, поки лок утримується.
-            await _manager.OperationLockAccessor.WaitAsync();
+            await _manager.OperationLockAccessor.WaitAsync(TestContext.Current.CancellationToken);
 
             // Act
-            var subscribeTask = _manager.Subscribe(_clientId, _testAccount, _eventsCreateOnly);
+            var subscribeTask = _manager.Subscribe(_clientId, _testAccount, _eventsCreateOnly, TestContext.Current.CancellationToken);
 
             // Поки лок утримується, Subscribe детерміновано НЕ завершується.
-            var finished = await Task.WhenAny(subscribeTask, Task.Delay(200));
+            var finished = await Task.WhenAny(subscribeTask, Task.Delay(200, TestContext.Current.CancellationToken));
             Assert.NotSame(subscribeTask, finished);
             Assert.Equal(0, _manager.GetSubscriptionCount(_clientId));
 
             // Відпускаємо лок — мутація проходить.
             _manager.OperationLockAccessor.Release();
-            var subscriptionId = await subscribeTask.WaitAsync(TimeSpan.FromSeconds(5));
+            var subscriptionId = await subscribeTask.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
 
             // Assert
             Assert.True(subscriptionId > 0);
@@ -458,7 +458,7 @@ namespace WsRpcServer.Tests.Subscriptions
 
             // Act & Assert
             await Assert.ThrowsAsync<ObjectDisposedException>(
-                async () => await _manager.Subscribe(_clientId, _testAccount, _eventsCreateOnly));
+                async () => await _manager.Subscribe(_clientId, _testAccount, _eventsCreateOnly, TestContext.Current.CancellationToken));
         }
     }
 }

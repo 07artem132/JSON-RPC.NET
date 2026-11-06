@@ -27,7 +27,7 @@ public sealed class CertificateValidationConventionTests
         foreach (var file in EnumerateLibrarySources())
         {
             var text = File.ReadAllText(file);
-            var root = CSharpSyntaxTree.ParseText(text).GetRoot();
+            var root = CSharpSyntaxTree.ParseText(text, cancellationToken: TestContext.Current.CancellationToken).GetRoot(TestContext.Current.CancellationToken);
 
             foreach (var lambda in BlindAcceptLambdas(root))
             {
@@ -49,15 +49,15 @@ public sealed class CertificateValidationConventionTests
         // Синтетичні «погані» зразки мають ловитися тим самим предикатом — інакше guard порожній.
         const string blind = "class C { void M() { System.Net.Security.RemoteCertificateValidationCallback cb = " +
                              "(sender, certificate, chain, sslPolicyErrors) => true; } }";
-        var root = CSharpSyntaxTree.ParseText(blind).GetRoot();
+        var root = CSharpSyntaxTree.ParseText(blind, cancellationToken: TestContext.Current.CancellationToken).GetRoot(TestContext.Current.CancellationToken);
         Assert.NotEmpty(BlindAcceptLambdas(root));
 
         const string noCheck = "class C { void M() { var m = System.Security.Cryptography.X509Certificates.X509RevocationMode.NoCheck; } }";
-        Assert.True(UnjustifiedNoCheck(CSharpSyntaxTree.ParseText(noCheck).GetRoot(), noCheck));
+        Assert.True(UnjustifiedNoCheck(CSharpSyntaxTree.ParseText(noCheck, cancellationToken: TestContext.Current.CancellationToken).GetRoot(TestContext.Current.CancellationToken), noCheck));
 
         const string justified = "class C { void M() {\n// justification: офлайн-середовище без CRL\n" +
                                  "var m = System.Security.Cryptography.X509Certificates.X509RevocationMode.NoCheck; } }";
-        Assert.False(UnjustifiedNoCheck(CSharpSyntaxTree.ParseText(justified).GetRoot(), justified));
+        Assert.False(UnjustifiedNoCheck(CSharpSyntaxTree.ParseText(justified, cancellationToken: TestContext.Current.CancellationToken).GetRoot(TestContext.Current.CancellationToken), justified));
     }
 
     /// <summary>Lambda-вирази, тіло яких — літерал <c>true</c>, із параметрами cert-валідації.</summary>

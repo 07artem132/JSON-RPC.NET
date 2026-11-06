@@ -231,10 +231,11 @@ This repo is mid-maturation. The current floor, established by `foundation-clust
 - `deps-latest` (**2.9.0**, no OpenSpec) — every dependency on its latest stable line: `MessagePack` 2.5.307 → **3.1.12**
   (StreamJsonRpc 2.26.150 still declares 2.5.307; its `MessagePackFormatter` was smoke-tested round-tripping requests,
   results and errors on 3.1.12), tests on **xunit v3** (`xunit.v3.mtp-off` 4.0.2 — VSTest host, so `dotnet test` flags in CI
-  are unchanged; `OutputType=Exe`; `xUnit1051` suppressed in the test csproj), `xunit.runner.visualstudio` 4.0.1, example
+  are unchanged; `OutputType=Exe`; `xUnit1051` fixed at every call site — tests pass `TestContext.Current.CancellationToken`), `xunit.runner.visualstudio` 4.0.1, example
   `Terminal.Gui` **2.5.0** (ported to the `IApplication` instance model). The one deliberate exception is
-  `Microsoft.CodeAnalysis.CSharp` **5.0.0** in the source generator: 5.9.0 ships with SDK 10.0.4xx, while the 10.0.1xx band
-  (the one in the `mcr.microsoft.com/dotnet/sdk:10.0` images) carries Roslyn 5.0 and would refuse to load the generator.
+  `Microsoft.CodeAnalysis.CSharp` **5.0.0** in the source generator: 5.9.0 ships with SDK 10.0.4xx, while consumers on the
+  10.0.1xx feature band (e.g. SDK 10.0.114 from the distro `dotnet-sdk-10.0` packages) carry Roslyn 5.0 and would refuse
+  to load the generator.
 - `auto-release` (CI, no version of its own) — every merge to `main` releases (PRC model): `.github/workflows/auto-release.yml`
   runs `scripts/auto-release.sh` (`plan` = `--dry-run`, then a live job with `contents: write`). Docs/tests/CI-only merges are a
   green no-op; a version already raised in the PR is tagged as-is; otherwise a conventional-commit bump (`!`/BREAKING → major,

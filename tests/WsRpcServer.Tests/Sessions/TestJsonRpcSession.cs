@@ -423,7 +423,7 @@
                 await _session.SendNotificationAsync(method, args);
                 
                 // Ждем немного, чтобы уведомление было обработано
-                await Task.Delay(200);
+                await Task.Delay(200, TestContext.Current.CancellationToken);
                 
                 // Assert
                 // Проверяем, что уведомление было обработано
@@ -470,7 +470,7 @@
     
                 // Ждем, пока ошибка будет залогирована
                 // Используем таймаут только для защиты от зависания теста
-                if (!await errorLogged.Task.WaitAsync(TimeSpan.FromSeconds(5)))
+                if (!await errorLogged.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken))
                 {
                     Assert.Fail("Error logging did not occur within the timeout period");
                 }
@@ -513,7 +513,7 @@
     
                // Ждем, пока уведомление начнет обрабатываться
                // Используем таймаут только для защиты от зависания теста
-               if (!await notificationReceived.Task.WaitAsync(TimeSpan.FromSeconds(5)))
+               if (!await notificationReceived.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken))
                {
                    Assert.Fail("Notification processing did not start within the timeout period");
                }
@@ -524,7 +524,7 @@
     
                // Assert
                // Ждем завершения задачи обработки
-               await processingTask.WaitAsync(TimeSpan.FromSeconds(5));
+               await processingTask.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
     
                // Проверяем логирование отмены
                _loggerMock.Verify(

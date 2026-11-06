@@ -26,7 +26,7 @@ public class WebSocketMessageHandlerDisposalGuardTests
     public void EveryMethodWritingToReceivePipe_GuardsOnDisposed()
     {
         var source = File.ReadAllText(LocateHandlerSource());
-        var root = CSharpSyntaxTree.ParseText(source).GetRoot();
+        var root = CSharpSyntaxTree.ParseText(source, cancellationToken: TestContext.Current.CancellationToken).GetRoot(TestContext.Current.CancellationToken);
 
         var violations = new List<string>();
 

@@ -18,12 +18,7 @@
           source-gen. Тримаємо perf-rule вимкненим тут так само, як CA1707 (test-only),
           щоб не змушувати дублери проходити через генератор.
         -->
-        <!--
-          xUnit1051 (xunit.v3) — порада передавати TestContext.Current.CancellationToken у кожен
-          виклик з CancellationToken. Більшість спрацювань — у тестових дублерах, а не в тест-методах;
-          тести вже обмежені власними таймаутами, тож це косметика скасування, не коректність.
-        -->
-        <NoWarn>$(NoWarn);CA1707;CA1848;CA1873;xUnit1051</NoWarn>
+        <NoWarn>$(NoWarn);CA1707;CA1848;CA1873</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>

@@ -224,7 +224,7 @@ namespace WsRpcServer.Tests.Events
             
             // Assert
             // Ожидаем завершения обработчика (с таймаутом)
-            var completedTask = await Task.WhenAny(handlerCalled.Task, Task.Delay(1000));
+            var completedTask = await Task.WhenAny(handlerCalled.Task, Task.Delay(1000, TestContext.Current.CancellationToken));
             // Проверяем, что именно обработчик завершился, а не таймаут
             Assert.Same(handlerCalled.Task, completedTask);
             // Проверяем, что обработчик вернул true, т.е. все проверки прошли успешно
@@ -271,12 +271,12 @@ namespace WsRpcServer.Tests.Events
             _eventProcessor.PublicNotifyClient(_clientId, "testMethod", new object());
             
             // Ждем, пока обработчик будет вызван
-            var result = await Task.WhenAny(handlerCalled.Task, Task.Delay(1000));
+            var result = await Task.WhenAny(handlerCalled.Task, Task.Delay(1000, TestContext.Current.CancellationToken));
             // Проверяем, что обработчик был вызван
             Assert.Same(handlerCalled.Task, result);
             
             // Ждем, пока исполнится продолжение с обработкой ошибки
-            await Task.Delay(100);
+            await Task.Delay(100, TestContext.Current.CancellationToken);
 
             // Assert
             // Проверяем, что ошибка была залогирована
@@ -369,7 +369,7 @@ namespace WsRpcServer.Tests.Events
             var deadline = DateTime.UtcNow.AddSeconds(2);
             while (processor.ClientHandlersAccessor.ContainsKey(clientId) && DateTime.UtcNow < deadline)
             {
-                await Task.Delay(20);
+                await Task.Delay(20, TestContext.Current.CancellationToken);
             }
 
             // Assert — клієнт автоматично відписаний + залоговано Warning про авто-відписку.
@@ -435,11 +435,11 @@ namespace WsRpcServer.Tests.Events
 
             // HandleClientFailure відпрацював (скинув лічильник) — далі біжить перевірка порогу.
             Assert.Same(processor.FailureHandled.Task,
-                await Task.WhenAny(processor.FailureHandled.Task, Task.Delay(2000)));
+                await Task.WhenAny(processor.FailureHandled.Task, Task.Delay(2000, TestContext.Current.CancellationToken)));
 
             // На pre-fix коді UnregisterClient викликається майже миттєво тим самим continuation'ом;
             // на post-fix — не викликається ніколи. Чекаємо вікно й переконуємось, що його НЕ було.
-            var unregistered = await Task.WhenAny(processor.UnregisterCalled.Task, Task.Delay(500));
+            var unregistered = await Task.WhenAny(processor.UnregisterCalled.Task, Task.Delay(500, TestContext.Current.CancellationToken));
             Assert.NotSame(processor.UnregisterCalled.Task, unregistered);
             Assert.True(processor.ClientHandlersAccessor.ContainsKey(clientId));
         }
