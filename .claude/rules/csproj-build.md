@@ -31,7 +31,7 @@ paths:
   add blanket suppressions to hide a real warning — fix the warning or suppress at the call site with a
   justification.
 - **Source generator project (`src/WsRpcServer.SourceGenerator`).** Targets `netstandard2.0`
-  (analyzers MUST), `IsRoslynComponent=true`, references `Microsoft.CodeAnalysis.CSharp` with
+  (analyzers MUST), `IsRoslynComponent=true`, references `Microsoft.CodeAnalysis.CSharp` **5.9.0** (keep it ≤ the Roslyn of the SDK band pinned in `global.json` — consumers on an older compiler get `CS9057` and the generator is skipped) with
   `PrivateAssets=all`, and is **not** independently packable (`IsPackable=false`). The library references
   it `OutputItemType="Analyzer" ReferenceOutputAssembly="false"` (applies it as a generator without adding
   a runtime dependency) and packs its DLL into the nupkg via
