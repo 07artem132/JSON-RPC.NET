@@ -52,7 +52,7 @@ namespace WsRpcServer.Tests.Services
             Assert.Contains("AddGeneratedRpcServiceCatalog", generated);
 
             // Найважливіше: згенерований код валідний C# (компілюється без помилок із реальними типами).
-            Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+            Assert.Empty(output.GetDiagnostics(TestContext.Current.CancellationToken).Where(d => d.Severity == DiagnosticSeverity.Error));
         }
 
         private const string SampleWithMethods = """
@@ -99,7 +99,7 @@ namespace WsRpcServer.Tests.Services
             Assert.DoesNotContain("\"hidden\"", generated);
 
             // Згенерований binder валідний C# (компілюється проти реального StreamJsonRpc).
-            Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+            Assert.Empty(output.GetDiagnostics(TestContext.Current.CancellationToken).Where(d => d.Severity == DiagnosticSeverity.Error));
         }
 
         private const string SampleWithOverloads = """
@@ -147,7 +147,7 @@ namespace WsRpcServer.Tests.Services
             Assert.Contains("AddLocalRpcMethod(\"ping\", ", generated);
 
             // Згенерований код валідний C#.
-            Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+            Assert.Empty(output.GetDiagnostics(TestContext.Current.CancellationToken).Where(d => d.Severity == DiagnosticSeverity.Error));
         }
 
         // Кілька форм колізій ОДНОЧАСНО: intra-interface overload ("send"), однаковий явний
@@ -224,7 +224,7 @@ namespace WsRpcServer.Tests.Services
             Assert.Contains(diagnostics, d => d.Id == "WSRPC003");
 
             // Згенерований код валідний C#.
-            Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+            Assert.Empty(output.GetDiagnostics(TestContext.Current.CancellationToken).Where(d => d.Severity == DiagnosticSeverity.Error));
         }
 
         private const string SampleWithAuthorize = """
@@ -268,7 +268,7 @@ namespace WsRpcServer.Tests.Services
             Assert.Contains("AddLocalRpcMethod(\"ping\", new global::System.Action(", generated);
 
             // Згенерований код валідний C# (компілюється проти реального StreamJsonRpc + WsRpcServer).
-            Assert.Empty(output.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+            Assert.Empty(output.GetDiagnostics(TestContext.Current.CancellationToken).Where(d => d.Severity == DiagnosticSeverity.Error));
         }
 
         [Fact]
@@ -302,6 +302,9 @@ namespace WsRpcServer.Tests.Services
                 typeof(IServiceCollection).Assembly,                 // Microsoft.Extensions.DependencyInjection.Abstractions
                 typeof(ServiceCollectionDescriptorExtensions).Assembly,
                 typeof(JsonRpc).Assembly,                            // StreamJsonRpc (binder посилається на JsonRpc)
+                // Binder приймає ClaimsPrincipal. Під xunit v3 (окремий процес, без VSTest-хоста)
+                // System.Security.Claims ще не завантажена на момент знімка — додаємо явно.
+                typeof(System.Security.Claims.ClaimsPrincipal).Assembly,
             };
 
             var locations = AppDomain.CurrentDomain.GetAssemblies()

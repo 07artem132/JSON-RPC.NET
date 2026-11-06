@@ -35,8 +35,8 @@ public class ConfigureAwaitConventionTests
             }
 
             var text = File.ReadAllText(file);
-            var tree = CSharpSyntaxTree.ParseText(text);
-            var root = tree.GetRoot();
+            var tree = CSharpSyntaxTree.ParseText(text, cancellationToken: TestContext.Current.CancellationToken);
+            var root = tree.GetRoot(TestContext.Current.CancellationToken);
 
             // 1) Звичайні await-вирази: awaited-вираз має бути викликом ...ConfigureAwait(...).
             foreach (var awaitExpr in root.DescendantNodes().OfType<AwaitExpressionSyntax>())

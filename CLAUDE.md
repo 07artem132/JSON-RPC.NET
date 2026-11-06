@@ -20,7 +20,8 @@ It is a **framework of abstract base classes** — consumers subclass `AbstractJ
 `[IRpcService]` discovery. The primary downstream consumer is **SignalCliNet.WsRpcServer**.
 
 - Target framework: **net10.0**. Package version lives in `Directory.Build.props`
-  (`<WsRpcServerPackageVersion>`, currently **2.8.1**) — never hardcode `<Version>` in a csproj.
+  (`<WsRpcServerPackageVersion>`; the current value is whatever `main` has — `scripts/auto-release.sh` bumps it) —
+  never hardcode `<Version>` in a csproj.
 - Five layers: Transport (WebSocket) → Protocol (JSON-RPC 2.0) → Session → Service → Subscription.
   Optional **secure** transport (TLS/mTLS) + RPC authorization layer over them (`secure-transport-mtls`, 2.6.0).
   Optional **observability** (`Meter`/`ActivitySource` "WsRpcServer") + concurrent-connection quota (`observability-and-resilience`, 2.7.0).
@@ -227,6 +228,19 @@ This repo is mid-maturation. The current floor, established by `foundation-clust
   (example). Deliberately **not** bumped: `Microsoft.CodeAnalysis.CSharp` 5.0.0 (the source generator's Roslyn floor —
   a higher ref would refuse to load in older consumer compilers), `Terminal.Gui` 1.x (2.x is an API rewrite),
   `xunit` 2.x / `xunit.runner.visualstudio` 3.x (v3 is a migration, not a bump). Suite stays 170.
+- `deps-latest` (**2.9.0**, no OpenSpec) — every dependency on its latest stable line: `MessagePack` 2.5.307 → **3.1.12**
+  (StreamJsonRpc 2.26.150 still declares 2.5.307; its `MessagePackFormatter` was smoke-tested round-tripping requests,
+  results and errors on 3.1.12), tests on **xunit v3** (`xunit.v3.mtp-off` 4.0.2 — VSTest host, so `dotnet test` flags in CI
+  are unchanged; `OutputType=Exe`; `xUnit1051` fixed at every call site — tests pass `TestContext.Current.CancellationToken`), `xunit.runner.visualstudio` 4.0.1, example
+  `Terminal.Gui` **2.5.0** (ported to the `IApplication` instance model). The one deliberate exception is
+  `Microsoft.CodeAnalysis.CSharp` **5.0.0** in the source generator: 5.9.0 ships with SDK 10.0.4xx, while consumers on the
+  10.0.1xx feature band (e.g. SDK 10.0.114 from the distro `dotnet-sdk-10.0` packages) carry Roslyn 5.0 and would refuse
+  to load the generator.
+- `auto-release` (CI, no version of its own) — every merge to `main` releases (PRC model): `.github/workflows/auto-release.yml`
+  runs `scripts/auto-release.sh` (`plan` = `--dry-run`, then a live job with `contents: write`). Docs/tests/CI-only merges are a
+  green no-op; a version already raised in the PR is tagged as-is; otherwise a conventional-commit bump (`!`/BREAKING → major,
+  `feat` → minor, else patch) is committed as `release: X.Y.Z`. Commit + tag go in one atomic `GITHUB_TOKEN` push, then
+  `publish-nuget.yml` is dispatched on the tag (a `GITHUB_TOKEN` tag push does not fire `push: tags`). Tags are immutable.
 - **Backlog** (from `AUDIT-FINDINGS.md`): **empty** — all 20 findings shipped/resolved, plus the AOT track (`registry-sourcegen-discovery` → `aot-readiness` → `aot-rpc-dispatch`) is complete for the part we own (discovery + dispatch). The remaining AOT limit is **upstream**: StreamJsonRpc's formatter/envelope serialization isn't AOT-clean (IL3053, verified on 2.25.29; 2.26.150 still marks `SystemTextJsonFormatter` `[RequiresDynamicCode]`), so `<IsAotCompatible>true</IsAotCompatible>` stays off until StreamJsonRpc ships an AOT-safe formatter. The StreamJsonRpc-replacement question was researched (spike) and rejected.
 
 ## Known upstream limitations

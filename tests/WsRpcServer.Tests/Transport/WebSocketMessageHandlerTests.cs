@@ -132,7 +132,7 @@ namespace WsRpcServer.Tests.Transport
             });
 
             // Let's give a short time for the task to process
-            await Task.Delay(100);
+            await Task.Delay(100, TestContext.Current.CancellationToken);
             
             // At this point, we should not have a complete JSON message
             Assert.False(hasCompleteJson);

@@ -513,7 +513,7 @@ namespace WsRpcServer.Tests.Core
                     var result = store.GetSubscription(1);
                     Assert.NotNull(result);
                     Assert.Equal("test-account", result.Account);
-                }));
+                }, TestContext.Current.CancellationToken));
             }
             
             // All tasks should complete without exceptions
@@ -546,7 +546,7 @@ namespace WsRpcServer.Tests.Core
                     EventType = TestEventType.Type2
                 };
                 store.UpdateSubscription(updatedSubscription);
-            });
+            }, TestContext.Current.CancellationToken);
             
             // Act - Concurrently start read operations
             var readTasks = Enumerable.Range(0, 5).Select(_ => Task.Run(() =>
