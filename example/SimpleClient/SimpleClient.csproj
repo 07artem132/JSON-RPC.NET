@@ -12,10 +12,10 @@
       <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.14" />
       <PackageReference Include="Spectre.Console" Version="0.57.2" />
       <PackageReference Include="StreamJsonRpc" Version="2.26.150" />
-      <!-- Закриваємо транзитивну вразливість StreamJsonRpc → MessagePack (GHSA-hv8m-jj95-wg3x, GHSA-qhrr-8q5h-9q3h). -->
-      <PackageReference Include="MessagePack" Version="2.5.307" />
-      <!-- Terminal.Gui тримаємо на лінії 1.x: 2.x — несумісне переписування API. -->
-      <PackageReference Include="Terminal.Gui" Version="1.19.0" />
+      <!-- Закриваємо транзитивну вразливість StreamJsonRpc → MessagePack (GHSA-hv8m-jj95-wg3x, GHSA-qhrr-8q5h-9q3h); 3.x — актуальна лінія. -->
+      <PackageReference Include="MessagePack" Version="3.1.12" />
+      <!-- Terminal.Gui 2.x: інстанс-модель IApplication (Application.Create), див. Program.cs. -->
+      <PackageReference Include="Terminal.Gui" Version="2.5.0" />
     </ItemGroup>
 
 </Project>

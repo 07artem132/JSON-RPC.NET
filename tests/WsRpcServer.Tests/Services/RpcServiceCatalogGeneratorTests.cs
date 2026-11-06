@@ -302,6 +302,9 @@ namespace WsRpcServer.Tests.Services
                 typeof(IServiceCollection).Assembly,                 // Microsoft.Extensions.DependencyInjection.Abstractions
                 typeof(ServiceCollectionDescriptorExtensions).Assembly,
                 typeof(JsonRpc).Assembly,                            // StreamJsonRpc (binder посилається на JsonRpc)
+                // Binder приймає ClaimsPrincipal. Під xunit v3 (окремий процес, без VSTest-хоста)
+                // System.Security.Claims ще не завантажена на момент знімка — додаємо явно.
+                typeof(System.Security.Claims.ClaimsPrincipal).Assembly,
             };
 
             var locations = AppDomain.CurrentDomain.GetAssemblies()
