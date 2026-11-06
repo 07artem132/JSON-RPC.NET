@@ -40,7 +40,8 @@ VERSION_FILES=("Directory.Build.props|WsRpcServerPackageVersion")
 # Шлях до CHANGELOG.md або порожньо, якщо репозиторій його не веде (тоді нотатки — --generate-notes).
 CHANGELOG=""
 # Не shipped-поверхня: зміни лише тут релізу не потребують.
-EXEMPT=(':!docs' ':!*.md' ':!.claude' ':!.github' ':!openspec' ':!scripts' ':!tests' ':!example'
+# global.json — пін SDK для збірки, не shipped-поверхня (пакет/бінарі від нього не змінюються).
+EXEMPT=(':!global.json' ':!docs' ':!*.md' ':!.claude' ':!.github' ':!openspec' ':!scripts' ':!tests' ':!example'
         ':!aot-smoke' ':!Images' ':!AUDIT-FINDINGS*' ':!LICENSE')
 # ------------------------------------------------------------------------------------------------
 
